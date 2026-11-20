@@ -1,4 +1,4 @@
-# A "New" Z80-Based Hybrid CCP (Console Command Processor) for CP/M 3 
+# CCP3RCL9 - A "Newly Revised, Hybrid" Z80-Based CCP (Console Command Processor) for CP/M 3 
 
 <div style="text-align:center">
 <img src="/Images/hybrid_ccp.webp" alt="" style="width:50%; height:auto;">    
@@ -103,7 +103,7 @@ From that *Profile.sub* list above, you will want to choose between using *Hist.
 
 ## Why Was This System Written and Unified?
 
-I had spent the last 9 months trying to get NzCOM and Z3Plus up and running on my CP/M 2.2 and CP/M 3 operating systems on my 2Mhz 52k Exidy Sorcerer (which I maintain both of their CP/M 2.2 and 3 source code implementations) . I have a lovely, pimped out version of CP/M 3 running on the Yaze.AG emulator and hence missed its wonderful user experience on my Exidy Sorcerer which offered no command recall, no command aliases and no named directories. I especially wanted to have a command alias mechanism to map to my highly curated set of CP/M utility programs. I also did not want to have the lag with these add-on utilities going to disk to access their state information (such as used with the history mechanism of the CCP+ v1.05 program).
+I had spent the last 9 months trying to get NzCOM and Z3Plus up and running on my CP/M 2.2 and CP/M 3 operating systems on my 2Mhz 52k Exidy Sorcerer (which I maintain both of their CP/M 2.2 and 3 source code implementations). I have a lovely, pimped out version of CP/M 3 running on the Yaze.AG emulator and hence missed its wonderful user experience on my Exidy Sorcerer which offered no command recall, no command aliases and no named directories. I especially wanted to have a command alias mechanism to map to my highly curated set of CP/M utility programs. I also did not want to have the lag with these add-on utilities going to disk to access their state information (such as used with the history mechanism of the CCP+ v1.05 program).
 
 It has also been 40 years since I had done a lot of intensive CP/M operating system coding and hence found this to be an interesting challenge to get "back in the groove" and to re-learn RSX programming concepts. Additionally, I am openly documenting this work and the final system for the benefit of others who may be in the same boat as myself with a limited TPA on their CP/M 3 systems in these more modern times. 
 
@@ -147,8 +147,8 @@ CP/M 3 plus the various RSX modules as provided in this project:
 | Named directories (via the SetDIR RSX) | 40,198   | 1,279 bytes  |
 | Hist.com (192 byte buffer size)        | 39,430   | 2,048 bytes  |
 | Hist30.com (9 x 40 byte buffers)       | 38,662   | 2,816 bytes  |
-| Alias + Hist + SetDIR                | 37,126   | bytes |
-| Alias + Hist30 + SetDIR                | 35,334   | bytes |
+| Alias + Hist + SetDIR                | 37,126   | ???????????????????? bytes |
+| Alias + Hist30 + SetDIR                | 35,334   | ?????????????????? bytes |
 
 CP/M 3 + Z3Plus:
 
@@ -171,12 +171,12 @@ Notes: NzCOM runs under my version of CP/M 2.2 for the Morrow DJ2D floppy disk c
 
 ## Speed Comparisons
 
-Not only is memory footprint important but also the time it takes from starting up CP/M 3 to getting the first command prompt (both with my new CCP system and that of Z3Plus or NcCOM). The following timing test comparisons were made with my 2Mhz Exidy Sorcerer running CP/M 3 off of the Dual SD S-100 board by John Monahan and CP/M 2.2 +NzCOM running off of the [Morrow DJ2D S-100 floppy controller](<https://github.com/rcl9/Morrow-DISK-JOCKEY-2D-Floppy-Disk-Controller-for-S100-Bus>) with a HxC 8in floppy emulator attached.
+Not only is memory footprint important but also the time it takes from starting up CP/M 3 to getting the first command prompt (both with my new CCP system and that of Z3Plus or NcCOM). The following timing test comparisons were made with my 2Mhz Exidy Sorcerer running CP/M 3 off of the Dual SD S-100 board by John Monahan and CP/M 2.2 + NzCOM running off of the [Morrow DJ2D S-100 floppy controller](<https://github.com/rcl9/Morrow-DISK-JOCKEY-2D-Floppy-Disk-Controller-for-S100-Bus>) with a HxC 8in floppy emulator attached.
 
 | System                                                       | Start-Up Speed                                 |
 |:------------------------------------------------------------ |:---------------------------------------------- |
 | CP/M 3 + CCP load time     | 14sec before loading profile.sub (Dual SD Card) |
-| Completion of Profile.sub (Setdef + Alias + Hist30 + SetDIR) | +9sec                                         |
+| Completion of Profile.sub (Setdef + Alias + Hist30 + SetDIR) | 14 sec CP/M 3 boot time + 9sec = 23sec    |
 | Z3Plus                                                       | 14 sec CP/M 3 boot time + 11sec = 25sec         |
 | Z3Plus (small)                                               | 14 sec CP/M 3 boot time + 11sec = 25sec         |
 
@@ -192,19 +192,15 @@ And for timing comparison with my CP/M 2.2 system running off of a HxC floppy em
 
 ## Modified Runtime Behavior of the CCP
 
-The CCP basically behaves exactly the same as the original DRI's CCP (as chosen by myself, given that it runs pretty smoothly).
-
-However, I added 5 new built-in commands:
+The CCP basically behaves exactly the same as the original DRI's CCP (as chosen by myself, given that it runs pretty smoothly). However, I added 5 new built-in commands:
 
 | New CCP Command  |  Description |
 |:----------- |:----------------------------------------- |
-| LstAlias        | List all of the aliases in the currently loaded Aliases.cmd file via AliasLdr.com | 
+| LstAlias        | List all of the aliases in the currently loaded *Aliases.cmd* file via *AliasLdr.com*. You can also type *Aliases* on the command line to list the entire contents of the *Aliases.cmd* file - this is actually an alias defined in that file.  | 
 | AliasNam    | Lists just the names of the aliases | 
-| DirNames    | List the named directories as presently loaded in from the ROOT.DIR file via the setdir.com program | 
+| DirNames    | List the named directories as presently loaded in from the *ROOT.DIR* file via the setdir.com program | 
 | Cls        | Clear the screen on the Exidy Sorcerer | 
-| ListEsc        | List the terminal ESCape sequences baked of the Exidy Sorcerer and the EXON3 monitor ROM by Walter Blady | 
-
-You can also type *Aliases* on the command line to list the entire contents of the *Aliases.cmd* file. This is actually an alias defined in that file. 
+| ListEsc        | List the terminal ESCape sequences of the Exidy Sorcerer and the EXMON3 monitor ROM by Walter Blady | 
 
 With *AliasLdr.com* invoked at start-up, entering a CCP command via the command line, or via a CCP Submit file, will have the command translated through the Aliases.cmd mapping file.
 
