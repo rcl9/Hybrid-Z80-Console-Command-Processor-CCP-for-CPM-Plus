@@ -24,7 +24,7 @@ For those that are not aware of them, NzCOM and Z3Plus are follow-on, early 1990
 
 This repo also provides:
 
-- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as code fixes to [SAlias.com v1.6 for Z3Plus](/Z3Plus/SAlias16.com).
+- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as code fixes to *SAlias16.com*.
 - A good primer and well documented code on how to write a medium-complexity RSX module for the CP/M 3 operating system (written by me).
 - A complementary subset of my highly curated set of [CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md) that augment this hybrid CCP system.
 
@@ -37,7 +37,7 @@ This repo also provides:
 [Usable TPA for the Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
 
     
-[History Recall Mechanisms](/HistoryRecall.md)
+[Command History Recall Mechanisms](/HistoryRecall.md)
 
 [Named Directories ](/Named_Directories.md)
 
@@ -45,12 +45,12 @@ This repo also provides:
 
 [Modified Runtime Behavior of the CCP](#modified-runtime-behavior-of-the-ccp)
 
-[A curated set of CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md)
+[Complementary CP/M Utilities for the CCP](/CPM_Utilities.md)
 
     
-[Why Was This System Written and Unified?](#why-was-this-system-written-and-unified?)
+[Why Was This System Written and Unified?](#why-was-this-system-written-and-unified-)
 
-[Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era?)
+[Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era-)
 
 [How to (Optionally) Compile and Link](#how-to-compile-and-link)
 
