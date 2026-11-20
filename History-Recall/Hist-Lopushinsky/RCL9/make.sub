@@ -1,0 +1,20 @@
+; Use Microsoft M80 to generate .REL files
+m80 =hist
+m80 =histclr
+m80 =histrsx
+
+; Create the .com files
+l80 /p:0100,histclr,histclr/n/e
+l80 /p:0100,hist,hist/n/e
+
+; Use LINK.COM with [OP] to convert the REL files to a PRL
+; link hist [op]
+link histrsx [op]
+
+; GENMOD generates a PRL from two .HEX files that were assembled 100H apart. 
+copy histrsx.prl histrsx.rsx
+gencom hist.com histrsx.rsx
+
+a:w tmp2/histclr.com b
+a:w tmp2/hist.com b
+

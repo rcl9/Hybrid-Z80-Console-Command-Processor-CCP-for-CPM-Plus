@@ -1,0 +1,41 @@
+;
+;HIST.MAC  07/25/86  Jim Lopushinsky
+;
+; Copyright (c) 1986 Jim Lopushinsky
+;
+; Requires Z80 processor and CP/M Plus
+;
+; Loader for History RSX module.  Initializes the RSX by calling
+;  the RSX using RSX function 55 (Initialize History RSX).
+; If an History RSX is already active, then removes old RSX and
+; the one just loaded.
+;
+; Assemble by:
+;	M80 =HIST
+;	L80 HIST,HIST/N/E
+;	M80 =HISTRSX
+;	LINK HISTRSX[OP]
+;	ERASE HISTRSX.RSX
+;	RENAME HISTRSX.RSX=HISTRSX.PRL
+;	GENCOM HIST HISTRSX
+
+	.z80
+
+bdos	equ	5
+
+main:
+	ld	de,histrsx
+	ld	c,60
+	call	bdos			; Call History RSX
+	or	a			; Did anyone respond?
+	jp	z,0			; Warm boot if all ok
+	ld	de,nohist		; Tell user that RSX is
+					;    not attached.
+	ld	c,9
+	jp	bdos
+
+nohist:		db	13,10,'History RSX not found$'
+histrsx:	db	55		; Function to init history RSX
+
+	end	main
+

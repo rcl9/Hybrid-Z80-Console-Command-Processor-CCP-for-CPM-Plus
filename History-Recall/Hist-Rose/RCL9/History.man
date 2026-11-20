@@ -1,0 +1,270 @@
+HISTORY.MAN	Command line history RSX Manual
+
+Version 1.9	Novemeber 06 1986
+
+This is the docfile for my first attempt at a history facility for CP/M-80
+V2.2 and V3.0. It is basically an extension of the CP/M BDOS 10 call. Under
+V2.2, HISTORY is a daemon, automatically loading itself just under the CCP,
+intercepting BDOS 10 calls. Under V3.0, HISTORY is a true RSX, again BDOS
+10 calls are detoured through this code.
+
+HISTORY will remember up to the last 9 BDOS 10 call lines (command lines,
+or lines fetched from inside a program). These remembered lines are kept
+resident in memory for fast recall and editing. Full command line editing
+(a la WordStar) is possible, as well as total or selective command line
+recall. HISTORY will also allow mutiple commands per line.
+
+However, a price must be paid. HISTORY is a memory hog. This is due to a
+number of factors: a) this is my first attempt at a history facility. The
+current version is 1.9, but the main body of the code remains unchanged
+from 1.0. b) The code is 8080 assembly. c) The history buffers are fixed
+length (128 bytes each), rather than variable length. Thus 1K of the space
+is used merely for buffer space!
+
+Basic keyboard layout is:
+
++--------+--------+--------+--------+
+| !      | @      | #      | $      |
+| Recall |   ---  |   ---  |   ---  |
++--+-----+--+--------+--------+--------+--------+--------+--------+--------+
+   | ^Q     | ^W     | ^E     | ^R     | ^T     | ^Y     | ^U     | ^I     |
+   |  ---   |PrevCmd |  ---   |  ---   | MvEol  | DelLin | DelBol |  ---   |
+   +--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+--+
+      | ^A     | ^S     | ^D     | ^F     | ^G     | ^H     | ^J     | ^K     |
+      | MvLWrd | MvLChr | MvRChr | MvRWrd |DelRChr |DelLChr |DelLWrd | DelEol |
+      +--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+--+-----+
+         | ^Z     | ^X     | ^C     | ^V     | ^B     | ^N     | ^M     |
+         |NextCmd | DelBol | IntChr | Toggle | MvBol  | DelEol | EolChr |
+         +--------+--------+--------+--------+--------+--------+--------+
+
+Some functions have 2 characters (primary and secondary) that will perform
+the same function. This is both for the added flexibility, and for CP/M+
+conformity.
+
+Note that this is the DEFAULT setup. You can use ANY single character code
+(preferably a control character) for any of the mentioned functions.
+
+DELETE CONTROL CHARACTER FUNCTIONS:
+-----------------------------------
+
+Delete previous character (DelLChr):
+Primary:   CTRL/H
+Secondary: DELETE (RUBOUT)
+This character will delete the character to the left of the cursor, and shifts
+the remaining line left one character. If the cursor is at the beginning of
+line (BOL), then no action is performed.
+
+Delete next character (DelRChr):
+Primary:   CTRL/G
+Secondary: -NONE-
+This character will delete the character to the right of the cursor (ie: the
+character UNDER the cursor), and shifts the remaining line left one character.
+If the cursor is at the end of line (EOL), then no action is taken.
+
+Delete previous word (DelLWrd):
+Primary:   CTRL/J
+Secondary: -NONE-
+This character will delete the word to the left of the cursor. If the cursor
+is outside a word, then all characters to the left of the cursor, up to the
+beginning of the previous word are deleted (including white space). If the
+cursor is inside a word, then all the characters of the current word to the
+left of the cursor are deleted. If the cursor is at the beginning of line
+(BOL), then no action is performed. A word is delimited by white space (blanks
+and tabs).
+
+Delete to beginning of line (DelBol):
+Primary:   CTRL/U
+Seconardy: CTRL/X
+This character will delete all the characters to the left of the cursor. The
+remaining line is then moved to the beginning of line (ie: left hand justified
+to the end of the CCP prompt). The cursor is at the BOL when done. If the
+cursor is at the beginning of line, then no active is taken.
+
+Delete to end of line (DelEol):
+Primary:   CTRL/K
+Seconary:  CTRL/N
+This character will delete all the characters to the right of the cursor (in-
+cluding the character UNDER the cursor). The cursor position remains unchanged.
+If the cursor is at the end of line (EOL), then no action is taken.
+
+Delete entire line (DelLin):
+Primary:   CTRL/Y
+Secondary: -NONE-
+This character will delete the entire line. The cursor is then moved to the
+beginning of line (BOL).
+
+
+MOVE CURSOR CONTROL CHARACTER FUNCTIONS:
+----------------------------------------
+
+Move cursor left one character (MvLChr):
+Primary:   CTRL/S
+Seconary:  -NONE-
+The cursor is moved left one character. If the cursor is at the beginning of
+line (BOL), then no action is taken
+
+Move cursor right one character (MvRChr):
+Primary:   CTRL/D
+Secondary: -NONE-
+The cursor is moved right one character. If the cursor is at the end of line
+(EOL), then no action is taken.
+
+Move cursor left one word (MvLWRd):
+Primary:   CTRL/A
+Seconary:  -NONE-
+The cursor is moved left to the beginning of the previous word. If the cursor
+is at the beginning of line (BOL), then no action is taken
+
+Move cursor right one word (MvRWrd):
+Primary:   CTRL/F
+Secondary: -NONE-
+The cursor is moved right to the beginning of the next word. If the cursor is
+at the end of line (EOL), then no action is taken.
+
+Move cursor to beginning of line (MvBol):
+Primary:   CTRL/B
+Secondary: -NONE-
+The cursor is moved to the beginning of line (BOL). If the cursor is at the
+BOL, then no action is taken.
+
+Move cursor to end of line (MvEol):
+Primary:   CTRL/T
+Secondary: -NONE-
+The cursor is moved to the end of line (EOL). If the cursor is at the EOL,
+then no action is taken.
+
+
+HISTORY PERUSAL CONTROL CHARACTER FUNCTIONS:
+--------------------------------------------
+
+Recall previous history command (PrevCmd):
+Primary:   CTRL/W
+Secondary: -NONE-
+This character will recall the previous history command. If more than one
+history buffer is available, then repeative pressing of this key will
+backup through all history commands. Once all history commands have been
+recalled, an empty line is recalled.
+
+Recall next history command (NextCmd):
+Primary:   CTRL/Z
+Secondary: -NONE-
+This character will recall the next history command. Used in conjuction
+with the "PrevCmd" character, this character will let the user peruse
+back and forth through all available history commands. Once the last
+(most current) history command is located, then next time this key is
+pressed, an empty line is recalled.
+
+
+SPECIAL CONTROL CHARACTERS:
+---------------------------
+
+Interrupt Character (IntChr):
+Primary:   CTRL/C
+Secondary: -NONE-
+If this character is entered at the beginning of line (BOL), then a warm
+boot is performed.
+
+End of line character (EolChr):
+Primary:   CTRL/M
+Secondary: -NONE-
+Entering this character terminates the command line acquistion. All
+characters from the beginning of line (BOL) to the first null (CTRL/@)
+are returned to the CCP (note that there is NO terminating null if the
+returned command line overflowed the buffer. Also, the cursor need not
+be at the logical end of line for termination).
+
+Comment character (Comment):
+Primary:   ;
+Secondary: #
+When this character is entered as the first character on the command line,
+the entire line is consider to be a comment, and is ignored (ie: not saved
+in the history buffers).
+
+Command separator character (ComSep):
+Primary:   !
+Secondary: ;
+This character will separate commands, allowing mulitple commands per line.
+Note that these characters can be the same as other (eg: "Comment" or "Recall")
+without conflict.
+
+Recall all history commands (Recall):
+Primary:   !
+Secondary: -NONE-
+If this character is entered at the beginning of line (BOL), terminated
+by the "EolChr" character (ie: this is NOT a hotkey), then all past history
+commands will be recalled, in list style, prefixed with an associated
+history number. 
+
+Selective history recall:
+Primary:   !<n>
+Secondary: -NONE-
+If the "Recall" character is suffixed by a history number, then the current
+command line is deleted, and the associated history buffer is displayed. The
+cursor is placed at the physical end of line (eg: "!3" will recall history
+buffer number 3).
+
+Toggle between insert and overstrike mode (Toggle):
+Primary:   CTRL/V
+Secondary: -NONE-
+This character will toggle between insert and ovestrike modes when entering
+characters on the current command line.
+
+
+NOTES:
+------
+When a control character is entered, it is echoed on the line as two
+characters (eg: CTRL/L is echoed "^L"). However, this pair is treated as a
+single "character" when moving or deleting.
+
+A word is delimited by spaces, tabs, or nulls.
+
+If the command line buffer overflows, a beep is sounded, and further
+characters are thrown away. It is still possible to edit the current
+command line to reduce the line length. Current command line length is
+determined by CP/M (usually 127 characters).
+
+
+LIMITATIONS:
+------------
+The tab character is not recognized at the moment. Also the CP/M CTRL/E
+(insert physical newline) and CTRL/R (repaint line) are not implemented,
+As well, the list toggle (CTRL/P) is not available.
+
+In addition, for V3.0, the System Control Block is not accessed, so that
+needed values to be got or put are not done so (eg: CTRL/H and DELETE both
+will delete the previous character, but this may not always be so).
+
+
+BYE5 COMPATIBILITY:
+-------------------
+HISTORY is compatible with Jim Lopushinsky's streamed down history
+facility (HIST+). This is a CP/M V3.0 only RSX that uses the BDOS 10 code
+to edit a command line, thus making a leaner RSX. Thus, under V3.0,
+HISTORY is fully compatible with BYE5, as well as Jim Lopushinsky's
+programs: HISTCL (clear history buffers) and HIST (the history program
+itself). The latter two being included in the library file.
+
+
+MEMORY NEEDS:
+-------------
+HISTORY hogs just over 3K. Under V2.2, it is loaded UNDER the CCP, this
+means the EFFECTIVE memory loss is more like 5K. It is for you to determine
+whether or not the memory loss negates its usefulness. On the plus side,
+HISTORY is completely memory resident (no buffer file), so there is NO
+speed degradation if you run a floppy system.
+
+
+IMPROVEMENTS:
+-------------
+Feel more than free to improve upon the code. As mentioned, I started from a
+blank screen and wrote this RSX without benefit of a predecessor. Keep in mind
+that the code was written from a 300 baud standpoint; the line is repainted
+as little as possible when modified. This is as HISTORY makes an ideal RSX
+for an RCPM system, and not all callers have 1200 (or even 2400) bps modems.
+
+
+Stuart Rose
+Co-Sysop, Starling CP/M+ RCPM
+Mississauga, Ontario, CANADA.
+(416) 624-4935   300/1200/2400 bps
+

@@ -1,0 +1,9 @@
+mac histldr $$pzsz
+mload histldr.com=histldr.hex
+rmac history $$pzsz
+link history [op]
+ren history.rsx=history.prl
+gencom histldr history
+ren hist30.com=histldr.com
+
+

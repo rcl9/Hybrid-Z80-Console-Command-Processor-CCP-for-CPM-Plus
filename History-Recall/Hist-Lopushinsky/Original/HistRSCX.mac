@@ -1,0 +1,601 @@
+;HISTRSX.MAC 07/25/86  Jim Lopushinsky  Meadowlark 403-435-6579
+;
+; Copyright (c) 1986 Jim Lopushinsky
+;
+; Requires Z80 processor and CP/M Plus
+;
+; A History command for CP/M+ similiar to Andrew McLean's BUFFER+,
+; but much smaller and simpler.  This RSX has the same features as
+; BUFFER+, with the added feature of seperation of CCP and user history
+; lines.  The decrease in size is acheived by using CP/M 3's built in
+; console input I/O redirection features that the CCP, SUBMIT, and GET
+; uses to redirect console input to a text string in RAM.  Thus, all the
+; editting code that is in the BDOS is not duplicated here.  The only
+; intercept code is for ^W (scroll back), ^V (scroll ahead),
+; ^L (list history lines).  This RSX is safe to remove at any time
+; by simply setting the remove flag.  Although some ideas were lifted
+; from BUFFER+, the code is all original.  This RSX is quite safe to
+; use beneath or on top of BYE or within Submit files (even nested).
+;
+	.z80
+
+buff_len	equ	300		; Length of buffer
+page_size	equ	23		; Lines to display before pause
+
+ctrlw		equ	'W'-40h
+ctrlv		equ	'V'-40h
+ctrll		equ	'L'-40h
+ctrlx		equ	'X'-40h
+ctrlk		equ	'K'-40h
+
+;..........
+;
+; RSX header
+;
+	dw	0,0,0
+	jp	ftest
+next:	jp	0
+prev:	dw	0
+remove:	db	0ffh
+	db	0
+	db	'HIST    '
+	db	0,0,0
+
+ftest:
+	ld	a,c			; Get the function
+	cp	60			; RSX function?
+	jr	z,rsxtest		; Jump if could be for us
+	ld	a,(initf)
+	or	a			; Initialized?
+	jr	z,next			; Ignore if not
+	ld	a,c			; Get BDOS function
+	cp	10			; Get Line?
+	jr	nz,next			; Ignore if not
+	ld	a,e
+	or	d			; Using initialized DMA?
+	jr	z,next			; Ignore if using DMA
+	ld	hl,(scbbase)
+	ld	l,0bah			; Point to console redirected addr
+	ld	a,(hl)
+	inc	l
+	or	(hl)			; CONIN redirection?
+	jr	nz,next			; Ignore if redirection
+	ld	l,0b4h			; Point to CCP flags
+	ld	a,(hl)
+	and	80h			; Isolate CCP active bit
+	ld	(ccpflag),a		; Save for redirection routines
+	push	de			; Save buffer address
+	xor	a
+	ld	(conchar),a		; Init for BIOS routines
+	ld	hl,0ffffh
+	ld	(cur_line),hl		; Init current line address
+	call	patch			; Patch BIOS
+	call	next			; Fill the buffer
+	call	unpatch			; Restore original BIOS vectors
+	pop	de			; Restore buffer address
+	inc	de			; Point to length
+	ld	a,(de)
+	or	a			; Anything there?
+	ret	z			; Ignore if empty
+	ld	c,a
+	ld	b,0			; Set up BC = length
+	inc	de			; Point to start of text
+	call	add_line		; Add current line to storage
+	ret
+
+;......
+;
+; Here to initialize or unload previous HISTORY RSX
+;
+;
+rsxtest:
+	ld	a,(de)			; Get RSX function
+	cp	56			; Clear buffer function?
+	jr	z,is56
+	cp	55			; Our init function?
+	jr	nz,next			; Ignore if not
+is55:
+	ld	a,(initf)
+	or	a			; Already initilized?
+	jr	z,notinit		; Jump if not init.
+	ld	a,0ffh
+	ld	(remove),a		; Set remove flag
+	inc	a
+	ld	(initf),a		; Reset init flag
+	ld	de,delmsg
+	ld	c,9
+	call	next			; Say that we will die.
+	xor	a
+	ret
+
+notinit:
+	call	next			; See if we are cloned
+	or	a
+	ret	z			; If cloned, just return
+	ld	(initf),a		; Set init flag
+	xor	a
+	ld	(remove),a		; Reset remove flag
+	ld	de,scbpb
+	ld	c,49
+	call	next			; Get SCB address
+	ld	(scbbase),hl
+	ld	l,68h			; Point to SCB wboot jump
+	ld	de,6			; Vectors are 6 apart
+	ld	b,4			; 4 vectors to mod
+	ld	a,21h			; LD H,nnnn op code
+modloop:
+	ld	(hl),a			; Change JP nnn to LD H,nnn
+	add	hl,de			; Bump offset
+	djnz	modloop
+	ld	hl,(1)			; Get BIOS wboot addr
+	ld	a,9
+	call	addhla			; Offset to CONOUT
+	ld	(xconout),hl		; Save for CONOUT calls
+	ld	de,histmsg
+	ld	c,9
+	call	next			; Say that we are active
+
+is56:
+	ld	hl,buff_start
+	ld	(next_free),hl		; Init next free addr
+	ld	hl,0
+	ld	(head),hl		; Init head pointer
+	ld	(tail),hl		;   and tail pointer
+	xor	a
+	ret
+
+;..........
+;
+; BIOS intercept routines.  Only called if patched
+;
+wboot:
+	ld	sp,stack		; Insure valid stack
+	call	unpatch			; Unpatch vectors
+	jp	xwboot			; And on to BIOS
+
+const:
+	ld	a,(xpend)		; ^X pending?
+	or	a
+	jr	nz,consta
+	ld	a,(conchar)		; Pending command?
+	jp	z,xconst		; On to BIOS if not
+consta:
+	or	0ffh			; Set to char ready
+	ret
+
+conin:
+	ld	hl,xpend
+	ld	a,(hl)
+	ld	(hl),0			; Reset ^X pending
+	or	a
+	jr	z,conin1
+	ld	a,ctrlx
+	ret				; Clear line
+conin1:
+	ld	a,(conchar)		; Char pending?
+	or	a
+	jr	nz,ischar
+	call	xconin			; Get a char
+	cp	ctrlw			; ^W ?
+	jr	z,set_hist
+	cp	ctrlv			; ^V ?
+	jr	z,set_hist
+	cp	ctrll			; ^L ?
+	ret	nz
+
+set_hist:
+	ld	(conchar),a		; Save char
+	ld	(xpend),a		; Set ^X pending flag
+	ld	a,ctrlk			; Return ^K to clear to end of line
+	ret
+
+ischar:
+	cp	ctrll			; Is it list history?
+	jr	z,listit
+	xor	a
+	ld	(count),a		; Init count
+ischara:
+	ld	a,(count)		; Get count of tries
+	cp	100			; Arbitrary maximum
+	jr	nc,conina		; Ignore if none
+	inc	a			; Bump count
+	ld	(count),a
+	ld	hl,(cur_line)		; Get current line addr
+	inc	hl			; Test for 0FFFFh
+	ld	a,h
+	or	l
+	jr	z,ischar1		; Jump if first
+	dec	hl
+	jr	ischar3
+ischar1:
+	ld	a,(conchar)		; Get char
+	cp	ctrlw
+	ld	hl,(tail)		; Get first ^W recall
+	jr	z,ischar2
+	ld	hl,(head)		; Get first ^V recall
+ischar2:
+	ld	a,h
+	or	l			; Test for none
+	jr	nz,aheadok		; Onward if something in storage
+conina:
+	ld	a,(conchar)		; Get pending char
+	call	unpatch			; We will no longer intercept
+	ret
+ischar3:
+	ld	a,(conchar)		; Get command
+	cp	ctrlw			; ^W ?
+	jr	z,backup
+	inc	hl
+	inc	hl			; point to next line addr
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)			; Get next line addr
+	ex	de,hl
+	ld	a,h
+	or	l			; End of chain?
+	jr	nz,aheadok
+	ld	hl,(head)		; Circle to head
+aheadok:
+	ld	(cur_line),hl		; Save current line addr
+	ld	a,4
+	call	addhla			; Offset to CCP flag
+	ld	a,(ccpflag)		; Get CCP flag
+	cp	(hl)			; Same?
+	jr	nz,ischara		; Try again if not.
+	inc	hl
+	inc	hl			; Offset to 2nd text char
+	ex	de,hl
+	ld	hl,(scbbase)		; Get SCB addr
+	ld	l,0bah			; Point to conin redirection addr
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d			; BDOS will now redirect console
+					;  input from our command line
+	xor	a
+	ld	(conchar),a		; Reset for later
+	dec	de			; Back to first char
+	ld	a,(de)
+	ret				; Return with first char
+backup:
+	ld	hl,(cur_line)
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)			; Get PREV line addr
+	ex	de,hl
+	ld	a,h
+	or	l			; At start of chain?
+	jr	nz,aheadok
+	ld	hl,(tail)
+	jr	aheadok
+
+listit:
+	xor	a
+	ld	(count),a		; Init page size count
+	ld	hl,(head)
+	ld	(list_line),hl		; Init current list line
+list1:
+	ld	hl,(list_line)		; Get current list line
+	ld	a,h
+	or	l			; Done?
+	jr	z,list2
+	ld	a,4
+	call	addhla			; Offset to CCP flag
+	ld	a,(ccpflag)		; get ccp flag
+	cp	(hl)			; Same?
+	inc	hl			; Offset to text start
+	call	z,showline		; Print it on console
+	ld	hl,(list_line)
+	inc	hl
+	inc	hl			; Offset to NEXT addr
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ld	(list_line),de		; Save next list line
+	jr	list1			; And loop for more
+list2:
+	call	spaces			; Space over to current column
+	xor	a
+	ld	(conchar),a		; Reset console char
+	jp	conin
+
+;........
+;
+; Turn up a new line and space over to current console column position
+;
+spaces:
+	push	hl
+	call	crlf			; Turn up a new line
+	ld	hl,(scbbase)
+	ld	l,0b7h			; Point to current console column
+	ld	a,(hl)
+	or	a			; Zero ?
+	jr	z,space2
+	ld	b,a
+	ld	c,' '			; Space
+space1:
+	call	conout			; output a space
+	djnz	space1
+space2:
+	pop	hl
+	ret
+
+;........
+;
+; Patch BIOS vectors
+;
+patch:
+	push	bc
+	push	de
+	ld	hl,(1)
+	ld	de,xwboot
+	ld	bc,9
+	ldir				; Save original BIOS vectors
+	ld	de,(1)
+	ld	hl,vwboot
+	ld	bc,9
+	ldir				; Patch in intercept vectors
+	pop	de
+	pop	bc
+	ret
+
+;.........
+;
+; Restore original BIOS vectors
+;
+unpatch:
+	push	de
+	ld	de,(1)
+	ld	hl,xwboot
+	ld	bc,9
+	ldir				; Restore original vectors
+	pop	de
+	ret
+
+xwboot:	ds	3
+xconst:	ds	3
+xconin:	ds	3
+
+vwboot:	jp	wboot
+vconst:	jp	const
+vconin:	jp	conin
+
+conout:
+	push	hl
+	push	bc
+	call	0
+xconout	equ	$-2
+	pop	bc
+	pop	hl
+	ret
+
+;.........
+;
+; Add a new line to line buffer area
+;
+add_line:
+	ld	hl,(next_free)		; Get addr of free area
+	add	hl,bc			; Add in line length
+	ld	a,6
+	call	addhla			; Account for header
+	push	de			; Save source addr
+	ld	de,buff_end		; Get addr of end
+	or	a
+	sbc	hl,de			; Room left?
+	jr	c,buff_ok
+	call	fix_buff		; Delete first entry and shuffle
+					;   things up.
+	pop	de			; Restore source addr
+	jr	add_line		; And try again
+buff_ok:
+	ld	hl,(tail)		; Get current tail addr
+	ld	a,h
+	or	l			; Anything there?
+	jr	nz,tailok
+	ld	hl,buff_start		; Start at beginning
+tailok:
+	ld	de,(next_free)		; Get free addr
+	inc	hl
+	inc	hl			; Offset to NEXT addr
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d			; Save forward pointer
+	ex	de,hl
+	dec	de
+	dec	de
+	dec	de			; Back to PREV pointer
+	ld	(tail),hl		; Save new tail addr
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d			; Save back pointer
+	inc	hl
+	xor	a
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a			; Init new forward pointer
+	inc	hl
+	ld	a,(ccpflag)		; Get CCP flag
+	ld	(hl),a			; Init CCP flag
+	inc	hl			; Point to start of text
+	pop	de			; Get source addr
+	ex	de,hl			; For LDIR
+	ldir				; Move it into place
+	xor	a
+	ld	(de),a			; Put in terminating zero
+	inc	de
+	ld	(next_free),de		; Update next free addr
+	ld	hl,(head)		; Get head addr
+	ld	a,h
+	or	l			; Null?
+	ret	nz			; Return if ok
+	ld	hl,(tail)
+	ld	(head),hl		; If first, make head = tail
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a			; Zero first back pointer
+	ret
+
+;..........
+;
+; Delete first history line, and move things up
+;
+fix_buff:
+	ld	hl,(head)		; Get head addr
+	ld	a,h
+	or	l
+	ret	z			; Return if nothing there
+	inc	hl
+	inc	hl			; Offset to NEXT addr
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)			; Get addr of 2nd line
+	ld	a,d
+	or	e			; Is there 2nd line?
+	jr	nz,moveok
+	ex	de,hl
+	ld	(head),hl		; Zero head
+	ld	(tail),hl		;   and tail
+	ld	hl,buff_start
+	ld	(next_free),hl		; Init next free addr
+	ret
+moveok:
+	push	bc			; Save length
+	ld	hl,(head)		; Get head addr
+	push	de
+	ex	de,hl
+	or	a
+	sbc	hl,de			; Calc amount of move
+	ld	(movlen),hl		; Save it
+	ld	b,h
+	ld	c,l
+	ld	hl,buff_len		; Get storage length
+	or	a
+	sbc	hl,bc			; Calc length for LDIR
+	ld	b,h
+	ld	c,l
+	ld	hl,(head)		; Get target of move
+	pop	de
+	ex	de,hl			; Swap for LDIR
+	ldir				; Move buffer down
+	ld	hl,(head)
+	xor	a
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a			; Init PREV pointer
+	inc	hl
+fix_loop:
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)			; Get NEXT pointer
+	ld	a,d
+	or	e			; At end?
+	jr	z,fix_done
+	push	hl
+	ld	hl,(movlen)		; Get move length
+	ex	de,hl
+	or	a
+	sbc	hl,de			; Calc new NEXT pointer
+	ex	de,hl
+	pop	hl
+	ld	(hl),d
+	dec	hl
+	ld	(hl),e			; Replace NEXT pointer
+	ex	de,hl
+	dec	de
+	dec	de
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d			; Update PREV pointer
+	inc	hl
+	jr	fix_loop
+fix_done:
+	dec	hl
+	dec	hl
+	dec	hl
+	ld	(tail),hl		; Update new tail pointer
+	ld	hl,(next_free)
+	ld	de,(movlen)
+	or	a
+	sbc	hl,de			; Calc new next free addr
+	ld	(next_free),hl
+	pop	bc			; Restore BC
+	ret
+
+;.............
+;
+; Display a command line on console
+;
+showline:
+	push	hl
+	ld	hl,count
+	ld	a,(hl)			; Get count
+	inc	(hl)			; Bump count
+	cp	page_size		; screen full?
+	call	z,new_page
+	call	spaces			; Turn up a new line and space over
+	pop	hl
+show1:
+	ld	a,(hl)
+	or	a			; At end?
+	ret	z
+	inc	hl
+	ld	c,a
+	call	conout			; Show the char
+	jr	show1
+
+;.......
+;
+; Prompt with [more] message
+;
+new_page:
+	ld	(hl),0			; Init line count
+	call	crlf			; Turn up a new line
+	ld 	hl,more
+	call	show1			; Print [more]
+	call	xconin			; Get any char
+	ld	hl,backsp
+	jr	show1			; Backspace over [more] and exit
+
+crlf:
+	ld	c,13
+	call	conout
+	ld	c,10
+	jp	conout
+
+
+addhla:
+	add	a,l
+	ld	l,a
+	ret	nc
+	inc	h
+	ret
+
+;............
+;
+; Data area
+;
+delmsg:		db	13,10,'History RSX removed$'
+histmsg:	db	13,10,'History RSX active$'
+more:		db	'[more]',0
+backsp:		db	13,'      ',13,0
+
+xpend:		ds	1		; ^X pending flag
+head:		dw	0		; Address of head
+tail:		dw	0		; Address of tail
+scbbase:	ds	2		; Address of SCB
+scbpb:		db	3ah
+		db	0
+initf:		db	0		; Init flag
+conchar:	db	0		; Current console char
+cur_line:	ds	2		; Address of current line
+list_line:	ds	2		; Address of list line
+movlen:		ds	2		; Move length
+ccpflag:	ds	1		; CCP active flag
+count:		ds	1		; Count of max tries
+next_free:	dw	buff_start	; Address of free ram
+buff_start:	ds	buff_len	; Room for history lines
+buff_end	equ	$		; Address of end
+		ds	6		; Temp stack during WBoot
+stack		equ	$
+
+	end
+

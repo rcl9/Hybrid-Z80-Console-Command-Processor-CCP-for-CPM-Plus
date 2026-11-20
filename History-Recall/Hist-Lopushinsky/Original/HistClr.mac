@@ -1,0 +1,26 @@
+;
+;HISTCL.MAC  07/25/86  Jim Lopushinsky
+;
+; A little program to clear history buffer area in
+; the History RSX.
+
+	.z80
+
+bdos	equ	5
+
+main:
+	ld	de,histcl
+	ld	c,60
+	call	bdos			; Clear history buffer
+	or	a			; history RSX there?
+	jp	z,0			; Warm boot if ok
+	ld	de,nohist		; Tell user that RSX is not
+					;    in memory
+	ld	c,9
+	jp	bdos
+
+nohist:		db	13,10,'History RSX not found$'
+histcl:		db	56		; Function to clear history buffer
+
+	end	main
+

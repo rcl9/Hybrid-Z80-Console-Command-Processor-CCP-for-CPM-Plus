@@ -1,4 +1,4 @@
-# A "New" Z80-Based Hybrid CCP (Console Command Processor) for CP/M+ (v3) - By RCL9
+# A "New" Z80-Based Hybrid CCP (Console Command Processor) for CP/M 3 
 
 <div style="text-align:center">
 <img src="/Images/hybrid_ccp.webp" alt="" style="width:50%; height:auto;">    
@@ -34,7 +34,7 @@ This repo also provides:
 
 [Speed Comparisons](#speed-comparisons)
 
-[Usable TPA for the Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
+[Usable TPA memory for the 52k Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
 
     
 [Command History Recall Mechanisms](/HistoryRecall.md)
@@ -47,7 +47,8 @@ This repo also provides:
 
 [Complementary CP/M Utilities for the CCP](/CPM_Utilities.md)
 
-    
+[What Does This System Offer For You?](#what-does-this-system-offer-for-you)
+
 [Why Was This System Written and Unified?](#why-was-this-system-written-and-unified)
 
 [Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era)
@@ -58,7 +59,7 @@ This repo also provides:
 
 - On your existing CP/M 3 boot disk, rename "ccp.com" to "ccp-dri.com" so that it no longer becomes the default CCP at warm boots.
 
-- Copy the files from the [Distribution](/Distribution) directory and the {CP/M Utilities}(/Distribution/CPM_Utilities.md) sub-directory to your CP/M 3 boot disk. Copy "CCP3RCL9.com" to "ccp.com" so that it becomes the default CCP. 
+- Copy the files from the [Distribution](/Distribution) directory and the {CP/M Utilities}(/Distribution/Additional CPM Utilities) sub-directory to your CP/M 3 boot disk. Copy "CCP3RCL9.com" to "ccp.com" so that it becomes the default CCP. 
 
 - Edit the *ROOT.dir* file with the named directory mappings for your system. This will get loaded via *SetDIR.com* at start-up
 
@@ -84,7 +85,7 @@ Note: *Hist.com* or *Hist30.com* must come last in the *Profile.sub* file or els
 
 From that *Profile.sub* list above, you will want to choose between using *Hist.com* and *Hist30.com*; the latter has much greater functionality but at the cost of a bit more TPA memory. 
 
-## What Does This Repo Offer For You?
+## What Does This System Offer For You?
 
 - Source code to the November 1982 version of DRI's CCP, ported by me from 8080 over to Z80 mnemonics. The patches of John Elliott and of DRI (May 1998) are included. This could be considered a new base-line source listing of a Z80-based DRI CCP for others to build upon and expand in the future. 
 
@@ -143,10 +144,11 @@ CP/M 3 plus the various RSX modules as provided in this project:
 |:-------------------------------------- |:-------- |:------------ |
 | Plain CP/M 3 system (no modules)       | 41,478   |              |
 | RCL9's alias command processor RSX     | 40198    | 1,280 bytes  |
-| Hist.com (192 byte buffer size)        | 39,430   | 2,048 bytes  |
-| Hist30.com (9 x 40 byte buffers)       | 37,126   | 2,816 bytes  |
 | Named directories (via the SetDIR RSX) | 40,198   | 1,279 bytes  |
-| Alias + Hist30 + SetDIR                | 34,822   | 6, 656 bytes |
+| Hist.com (192 byte buffer size)        | 39,430   | 2,048 bytes  |
+| Hist30.com (9 x 40 byte buffers)       | 38,662   | 2,816 bytes  |
+| Alias + Hist + SetDIR                | 37,126   | bytes |
+| Alias + Hist30 + SetDIR                | 35,334   | bytes |
 
 CP/M 3 + Z3Plus:
 
@@ -173,19 +175,18 @@ Not only is memory footprint important but also the time it takes from starting 
 
 | System                                                       | Start-Up Speed                                 |
 |:------------------------------------------------------------ |:---------------------------------------------- |
-| Stock CP/M 3                                                 | 9sec before loading profile.sub (Dual SD Card) |
-| Loading of Profile.sub                                       | +4sec                                          |
-| Completion of Profile.sub (Setdef + Alias + Hist30 + SetDIR) | +10sec                                         |
-| Z3Plus                                                       | 9 sec CP/M 3 boot time + 11sec = 20sec         |
-| Z3Plus (small)                                               | 9 sec CP/M 3 boot time + 11sec = 20sec         |
+| CP/M 3 + CCP load time     | 14sec before loading profile.sub (Dual SD Card) |
+| Completion of Profile.sub (Setdef + Alias + Hist30 + SetDIR) | +9sec                                         |
+| Z3Plus                                                       | 14 sec CP/M 3 boot time + 11sec = 25sec         |
+| Z3Plus (small)                                               | 14 sec CP/M 3 boot time + 11sec = 25sec         |
 
-Thus a complete load of CP/M 3, the Profile.sub file and loading of the 3 RSX modules takes *23 seconds*. This includes the time to parse the ALias.cmd file and the ROOT.DIR named directories file (which thereafter do not need to be parsed again in real time after each command is entered on the CCP command line). This is to be compared with the *20 seconds* to boot just CP/M 3 itself and then the two-stage Z3Plus loading process; this time does not include the time to parse any additional files that Z3Plus may reference such as its own Alias.cmd file.
+Thus a complete load of CP/M 3, the Profile.sub file and loading of the 3 RSX modules takes *23 seconds*. This includes the time to parse the ALias.cmd file and the ROOT.DIR named directories file (which thereafter do not need to be parsed again in real time after each command is entered on the CCP command line). This is to be compared with the *25 seconds* to boot just CP/M 3 itself and then the two-stage Z3Plus loading process; this time does not include the time to parse any additional files that Z3Plus may reference such as its own Alias.cmd file.
 
 And for timing comparison with my CP/M 2.2 system running off of a HxC floppy emulator (8in drive):
 
 | System            | Start-Up Speed                        |
 |:----------------- |:------------------------------------- |
-| Stock CP/M 2.2    | 6sec (HxC floppy emulator, 8in drive) |
+| CP/M 2.2    | 6sec (HxC floppy emulator, 8in drive) |
 | NzCOM             | +40sec                                |
 | NzCOM via NzBlitz | +12sec                                |
 
@@ -213,7 +214,7 @@ With *Hist.com* or *Hist30.com* invoked at start-up, command recall will be avai
 
 ## How to Compile and Link
 
-I am providing runtime Z80 binaries in the [Distribution]/Distribution) directory and hence you should not have to compile and link the code yourself. Figuring out how to do this, 40 years later, was a minor thorn in my side! However, it can easily be done by following these simple suggestions. 
+I am providing runtime Z80 binaries in the [Distribution](/Distribution) directory and hence you should not have to compile and link the code yourself. Figuring out how to do this, 40 years later, was a minor thorn in my side! However, it can easily be done by following these simple suggestions. 
 
 ### The *CCP3RCL9.com*, *AliasLdr.com* and *SetDir.com*:
 
