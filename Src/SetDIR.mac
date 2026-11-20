@@ -1,0 +1,377 @@
+	.z80
+
+; Utility to load directory names into the DIR RSX for use by the CCP+ v1.05 software
+; Copyright (c) 1984 - Jim Lopushinsky
+
+; Load in the default ROOT.DIR file:
+;	setdir
+; Remove the existing RSX module:
+;	setdir off
+
+; Bug fixes by RCL9, November 2026
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+
+; Format of the final parsed buffer
+;	DIRNAME of 1 to 8 characters, ';', 0, (user-num << 8 | drive number)
+;	0
+
+bdos	equ	5
+fcb	equ	5ch
+
+setdir:
+	ld	sp,stack		;set up local stack
+	ld	de,scbpb
+	ld	c,49
+	call	bdos			;return SCB address
+	ld	(scbase),hl		;save SCB address
+	ld	a,(fcb+1)
+	cp	' '			;any command line options?
+	jp	nz,noroot		;jump if file spec
+	ld	hl,rootdir		;point to default name (ROOT.DIR)
+	ld	de,fcb+1
+	ld	c,8
+	call	move			;move it into place
+
+noroot:
+	ld	hl,fcb+1
+	ld	de,off			;point to "OFF"
+	ld	c,8
+	call	comp			;does he want to remove dir table?
+	jp	nz,notoff		;jump if he doesn't
+
+	ld	hl,(bdos+1)
+	call	delrsx			;remove the RSX just loaded
+
+	ld	de,rsx66
+	ld	c,60
+	call	bdos			;see if DIR RSX exists
+	or	a
+	jp	z,isdir			;jump if ok.
+
+	call	ilprt			;tell him the bad news
+	db	'Directory names are not loaded',13,10,0
+	rst	0
+
+isdir:
+	call	delrsx			;remove dir table
+	call	ilprt
+	db	'Directory names removed',13,10,0
+	rst	0
+
+; Here for normal load of directory table
+
+notoff:
+	ld	de,fcb+9
+	ld	a,(de)
+	ld	hl,dir
+	ld	c,3
+	cp	' '			;is file type specified?
+	call	z,move			;if not, move DIR into place
+
+	ld	de,fcb
+	ld	c,15
+	call	bdos			;open the file
+	inc	a
+	jp	nz,isfile		;jump if open ok
+
+	call	ilprt
+	db	'ROOT.DIR file not found.',13,10,0
+
+	ld	hl,(bdos+1)
+	call	delrsx			;delete RSX just loaded
+
+	rst	0
+
+isfile:
+	ld	de,rsx66
+	ld	c,60
+	call	bdos			;see if old DIR RSX exists
+	or	a
+	jp	nz,nodir		;jump if no old DIR RSX exists
+
+	ld	(diradr),hl
+	ld	hl,(bdos+1)
+	call	delrsx			;remove RSX just loaded
+
+	jp	onward
+
+nodir:
+	ld	hl,(bdos+1)
+	ld	l,1bh			;point to init flag in RSX
+	ld	(hl),0ffh		;set DIR RSX as initialized
+	ld	de,rsx66
+	ld	c,60
+	call	bdos			;get table load address
+	ld	(diradr),hl
+
+onward:
+	ld	hl,(diradr)		;get table load address
+	ld	l,1bh			;point to init flag
+	ld	(hl),0			;reset it in case of errors
+	ld	l,0eh			;point to remove flag
+	ld	(hl),0ffh		;set remove flag in case of errors
+	ld	l,0ffh
+	inc	h			;calculate highest usable table address
+	ld	(dirend),hl
+	ld	hl,(diradr)		;get directory load address
+
+	ex	de,hl
+	ld	hl,rootbuf		;point to file buffer
+	call	rootfill		;fill the buffer
+	ld	(rootloc),a		;reset offset into buffer
+	jp	nz,rootparse		;jump if not at end of file
+
+eof:
+	call	ilprt
+	db	'Abnormal EOF reading directory file',13,10,0
+errxit:
+	ld	hl,(bdos+1)
+	call	delrsx
+	rst	0
+
+findlf:
+	call	rootbyte
+	jp	z,done
+	cp	10
+	jp	nz,findlf
+
+rootparse:
+	push	de
+	ld	b,9
+rootnmove:
+	call	rootbyte
+	jp	z,done1
+	call	chkdir
+	ld	(de),a
+	inc	de
+	cp	';'
+	jp	z,rootpass
+	dec	b
+	jp	nz,rootnmove
+	jp	golf
+rootpass:
+	ld	b,9
+rootpmove:
+	call	rootbyte
+	jp	z,eof
+	call	chkdir
+	cp	' '
+	jp	z,rootdu
+	ld	(de),a
+	inc	de
+	dec	b
+	jp	nz,rootpmove
+golf:
+	pop	de
+	jp	findlf
+rootdu:
+	xor	a
+	ld	(de),a
+	inc	de
+	call	chkdir
+rootblk:
+	call	rootbyte
+	jp	z,eof
+	cp	' '
+	jp	z,rootblk
+	sub	'A'
+	jp	m,golf
+	cp	16
+	jp	nc,golf
+	ld	(rootdrv),a
+	ld	b,0
+rootu:
+	call	rootbyte
+	jp	z,eof
+	cp	' '
+	jp	z,rootudone
+	sub	'0'
+	jp	m,golf
+	cp	10
+	jp	nc,golf
+	push	af
+	ld	a,b
+	add	a,a
+	add	a,a
+	add	a,b
+	add	a,a
+	ld	b,a
+	pop	af
+	add	a,b
+	ld	b,a
+	cp	16
+	jp	nc,golf
+	jp	rootu
+rootudone:
+	ld	a,b
+	rept	4
+	add	a,a
+	endm
+	ld	b,a
+	ld	a,(rootdrv)
+	or	b
+	ld	(de),a
+	inc	de
+	pop	bc
+	jp	findlf
+done1:
+	pop	de
+done:
+	call	chkdir
+	xor	a
+	ld	(de),a
+	ld	hl,(diradr)
+	ld	l,1bh
+	ld	(hl),0ffh
+	ld	l,0eh
+	ld	(hl),0
+	call	ilprt
+	db	'Directory table initialized',13,10,0
+	rst	0
+
+rootbyte:
+	push	hl
+	push	de
+	push	bc
+	ld	a,(rootloc)
+	or	a
+	jp	p,norootf
+	call	rootfill
+	jp	z,rootnon
+norootf:
+	inc	a
+	ld	(rootloc),a
+	dec	a
+	call	addhla
+	ld	a,(hl)
+	and	7fh
+	cp	26
+rootnon:
+	pop	bc
+	pop	de
+	pop	hl
+	ret
+
+rootfill:
+	push	hl
+	push	de
+	ex	de,hl
+	ld	c,26
+	call	bdos
+	ld	de,fcb
+	ld	c,20
+	call	bdos
+	pop	de
+	pop	hl
+	or	a
+	jp	z,goodr
+	xor	a
+	ret
+goodr:
+	inc	a
+	ld	a,0
+	ret
+
+addhla:
+	add	a,l
+	ld	l,a
+	ret	nc
+	inc	h
+	ret
+
+chkdir:
+	push	af
+	push	hl
+	ld	hl,(dirend)
+	call	cphlde
+	pop	hl
+	jp	nc,dirok
+	call	ilprt
+	db	'Too many directory table entries',13,10,0
+	jp	errxit
+dirok:
+	pop	af
+	ret
+
+cphlde:
+	ld	a,h
+	cp	d
+	ret	nz
+	ld	a,l
+	cp	e
+	ret
+
+delrsx:
+	ld	de,dir
+	ld	l,10h		; Make sure that the RSX name matches in the loaded header
+	ld	c,8
+	call	comp
+	ret	nz
+
+	ld	l,0eh
+	ld	(hl),0ffh	; Set remove flag in the RSX
+
+	ret
+
+; RCL9, disabled from the original code as this does not work. Rather, we only need to set the
+; RSX "remove" flag and then the final call to "RST 0" will have the CPM3 warmstart routine
+; clean up the removed RSX modules.
+;	ld	de,0
+;	ld	c,59		; Call the CPM3 overlay manager to delete the RSX module
+;	jp	bdos
+
+ilprt:
+	pop	hl
+	ld	a,(hl)
+	inc	hl
+	push	hl
+	or	a
+	ret	z
+	ld	e,a
+	ld	c,2
+	call	bdos
+	jp	ilprt
+
+move:
+	ld	a,(hl)
+	ld	(de),a
+	inc	hl
+	inc	de
+	dec	c
+	jp	nz,move
+	ret
+
+comp:
+	ld	a,(de)
+	cp	(hl)
+	ret	nz
+	inc	de
+	inc	hl
+	dec	c
+	jp	nz,comp
+	ret
+
+	dseg
+
+stack	equ	100h
+scbpb:	db	3ah,0
+rootdir:
+	db	'ROOT    '
+off:	db	'OFF     '
+rsx66:	db	66
+dir:	db	'DIR     '	; Default file extension
+diradr:	ds	2
+dirend:	ds	2
+rootbuf:
+	ds	128
+rootdrv:
+	ds	1
+rootloc:
+	ds	1
+scbase:	ds	2
+
+
+	end	setdir
+

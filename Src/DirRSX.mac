@@ -1,0 +1,42 @@
+	.z80
+
+; DIR RSX used in conjuction with SETDIR.  The Directory names
+; are loaded into this RSX.  The only function that this RSX performs
+; is to return the address of the Directory table for the CCP+ v1.05 program.
+;
+; Copyright (c) 1984 - Jim Lopushinsky
+
+;RSX prefex follows:
+;
+	dw	0,0,0
+	jp	ftest
+next:
+	jp	0
+	dw	0,0
+	db	'DIR     '
+	db	0,0,0
+
+init:	db	0
+
+ftest:
+	ld	a,(init)
+	or	a
+	jp	z,next
+	ld	a,c
+	cp	60
+	jp	nz,next
+	ld	a,(de)
+	cp	66
+	jp	nz,next
+	xor	a
+	ld	hl,dirtbl
+	ret
+
+dirtbl:
+	db	0
+	ds	256		;to give 2 pages for the RSX and lots
+				;of room for directory names
+	db	0
+
+	end
+

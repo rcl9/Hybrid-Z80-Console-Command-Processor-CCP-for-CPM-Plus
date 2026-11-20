@@ -1,0 +1,3163 @@
+; Note: if you are testing this on the Yaze.AG CPM3 emulator then you first need to call "setdir"
+; and "aliasldr" before you invoke ccp3rcl9.com from the original DRI CCP.COM.
+
+; =========================================================================
+      title	'CP/M 3 - DRI's Console Command Processor - November 1982'
+; =========================================================================
+
+; Version 3.00  Nov 30 1982 - Doug Huskey
+;	Copyright (C) 1982
+;	Digital Research
+;	P.O. Box 579
+;	Pacific Grove, CA 93950
+
+; Revised: by RCL9, November 2026, as CCP3RCL9.mac
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+;
+;	Converted the original 8080 source code to Z80
+;		- Changed "ld bc,(drv0-1)*256+4" to "0+(drv0-1)*256+4" so it is not read as (Mem)
+;
+;	Added new command aliasing mechanism (AliasTra.mac) along the lines of that in Z3Plus and ZCPR3.
+;	The aliases are defined in the "aliases.cmd" text file read in from disk, not to be confused
+;	with the similar "alias.cmd" file of Z3Plus. They are loaded in the RSX via "aliasldr.com"
+;	and removed by "aliasldr.com off".
+;
+;	Incorporated the Named Directories mechanism from the CCP+ v1.05 program of Jim Lopushinsky from 1986.
+;		"setdir" loads in ROOT.DIR and "setdir off" disables the RSX module.
+;		The new "dirnames" internal CCP command lists all of the named directories.
+;		Fixed bugs in the original SetDIR.mac file for RSX deletion.
+;
+;	Added the internal command "listesc" which lists the terminal ESC sequences of the Exidy Sorcerer
+;
+
+;  Revised: John Elliott, 25-5-1998, to include DRI patches and multiple error checking ability:
+;	If the sequence
+;		COMMAND
+;		:C1
+;               :C2
+;
+;	was executed under DRI's CCP, and COMMAND returned an error, then C1 would not be
+;	executed but C2 would. Under this CCP C2 would not be.
+
+; =======================================================================
+; =======================================================================
+
+INCLUDE	ALIASHDR	; The common definitions
+
+; *****  The following loader equates must be set to 100H + the addresses specified in LOADER.PRN
+;	They will be printed out (for comparison purposes) by the "rmac loader3" compilation command.
+rsxstart	equ	0100h
+fixchain	equ	01D0h
+fixchain1	equ	01EBh
+fixchain2	equ	01F0h
+rsxchain	equ	0200h
+reloc		equ	02CAh
+calcdest	equ	030Fh
+scbaddr		equ	038Dh
+banked		equ	038Fh
+rsxend		equ	0394h
+
+	ccporg		equ	040Ah	;[JCE] was 041Ah, but reduced to incorporate patches
+;	ccporg		equ	041Ah
+
+; Check equates (moved here from above; they refer to the
+; addresses defined just above, and ccpend near the end of file)
+;
+equ1	equ	rsxstart  ;does this adr match loader's?
+equ2	equ	fixchain  ;does this adr match loader's?
+equ3	equ	fixchain1 ;does this adr match loader's?
+equ4	equ	fixchain2 ;does this adr match loader's?
+equ5	equ	rsxchain ;does this adr match loader's?
+equ6	equ	reloc     ;does this adr match loader's?
+equ7	equ	calcdest  ;does this adr match loader's?
+equ8	equ	scbaddr   ;does this adr match loader's?
+equ9	equ	banked    ;does this adr match loader's?
+equ10	equ	rsxend    ;does this adr match loader's?
+equ11	equ	ccporg    ;does this adr match loader's?
+;
+; NOTE: THE ABOVE EQUATES MUST BE CORRECTED IF NECESSARY AND THE JUMP TO START AT
+; THE BEGINNING OF THE LOADER MUST BE SET TO THE ORIGIN ADDRESS BELOW:
+
+	.z80
+	aseg
+
+	org	ccporg		;LOADER is at 100H to 3??H
+
+;	(BE SURE THAT THIS LEAVES ENOUGH ROOM FOR THE LOADER BIT MAP)
+
+
+;  Conditional Assembly toggles:
+
+true	equ	0ffffh
+false	equ	0h
+newdir	equ	true
+newera	equ	true		;confirm any ambiguous file name
+dayfile	equ	true
+prompts	equ	false
+func152	equ	true
+multi	equ	true		;multiple command lines
+				;also shares code with loader (100-2??h)
+
+; Enable the new ZCPR-like Alias command processor, Nov 9 2026 by RCL9
+INCL$ALIAS$CMD$PROCESSOR  equ	true
+
+; Maximum number of colunns on the display terminal
+MAX$COLUMNS	equ	64
+
+;************************************************************************
+;
+;	GLOBAL EQUATES
+;
+;************************************************************************
+
+; CP/M BASE PAGE
+wstart	equ	0		;warm start entry point
+defdrv	equ	4		;default user & disk
+bdos	equ	5		;CP/M BDOS entry point
+osbase	equ	bdos+1		;base of CP/M BDOS
+cmdrv	equ	050h		;command drive
+dfcb	equ	05ch		;1st default fcb
+dufcb	equ	dfcb-1		;1st default fcb user number
+pass0	equ	051h		;1st default fcb password addr
+len0	equ	053h		;1st default fcb password length
+dfcb1	equ	06ch		;2nd default fcb
+dufcb1	equ	dfcb1-1		;2nd default fcb user number
+pass1	equ	054h		;2nd default fcb password addr
+len1	equ	056h		;2nd default fcb password length
+buf	equ	80h		;default buffer
+tpa	equ	100h		;transient program area
+
+	if multi
+comlen	equ	100h-19h	;maximum size of multiple command
+				;RSX buffer with 16 byte header & terminating zero
+	else
+comlen	equ	tpa-buf
+	endif
+
+; BDOS FUNCTIONS
+
+vers	equ	31h		;BDOS vers 3.1
+cinf	equ	1		;console input
+coutf	equ	2		;console output
+crawf	equ	6		;raw console input
+pbuff	equ	9		;print buffer to console
+rbuff	equ	10		;read buffer from console
+cstatf	equ	11		;console status
+resetf	equ	13		;disk system reset
+self	equ	14		;select drive
+openf	equ	15		;open file
+closef	equ	16		;close file
+searf	equ	17		;search first
+searnf	equ	18		;search next
+delf	equ	19		;delete file
+readf	equ	20		;read file
+makef	equ	22		;make file
+renf	equ	23		;rename file
+dmaf	equ	26		;set DMA address
+userf	equ	32		;set/get user number
+rreadf	equ	33		;read file
+flushf	equ	48		;flush buffers
+scbf	equ	49		;set/get SCB value
+loadf	equ	59		;program load
+allocf	equ	98		;reset allocation vector
+trunf	equ	99		;read file
+parsef	equ	152		;parse file
+
+; ASCII characters
+
+ctrlc	equ	'C'-40h
+cr	equ	'M'-40h
+lf	equ	'J'-40h
+tab	equ	'I'-40h
+eof	equ	'Z'-40h
+
+; RSX MEMORY MANAGEMENT EQUATES
+
+; RSX header equates
+
+rsxentry	equ	06h		;RSX contain jump to start
+nextadd		equ	0bh		;address of next RXS in chain
+prevadd		equ	0ch		;address of previous RSX in chain
+warmflg		equ	0eh		;remove on wboot flag
+endchain	equ	18h		;end of RSX chain flag
+
+; LOADER.RSX equates
+
+module		equ	100h		;module address
+
+; COM file header equates
+
+comsize		equ	tpa+1h		;size of the COM file
+rsxoff		equ	tpa+10h		;offset of the RSX in COM file
+rsxlen		equ	tpa+12h		;length of the RSX
+
+; SYSTEM CONTROL BLOCK OFFSETS
+
+pagoff		equ	09ch
+olog		equ	pagoff-0ch	; removeable media open vector
+rlog		equ	pagoff-0ah	; removeable media login vector
+bdosbase	equ	pagoff-004h	; real BDOS entry point
+hashl		equ	pagoff+000h	; system variable
+hash		equ	pagoff+001h	; hash code
+bdosversion	equ	pagoff+005h	; BDOS version number
+utilflgs	equ	pagoff+006h	; utility flags
+dsplflgs	equ	pagoff+00ah	; display flags
+clpflgs		equ	pagoff+00eh	; CLP flags
+clpdrv		equ	pagoff+00fh	; submit file drive
+progretcode	equ	pagoff+010h	; program return code
+multirsxpg	equ	pagoff+012h	; multiple command buffer page
+ccpdrv		equ	pagoff+013h	; ccp default drive
+ccpusr		equ	pagoff+014h	; ccp default user number
+ccpconbuf	equ	pagoff+015h	; ccp console buffer address
+ccpflag1	equ	pagoff+017h	; ccp flags byte 1
+ccpflag2	equ	pagoff+018h	; ccp flags byte 2
+ccpflag3	equ	pagoff+019h	; ccp flags byte 3
+conwidth	equ	pagoff+01ah	; console width
+concolumn	equ	pagoff+01bh	; console column position
+conpage		equ	pagoff+01ch	; console page length (lines)
+conline		equ	pagoff+01dh	; current console line number
+conbuffer	equ	pagoff+01eh	; console input buffer address
+conbuffl	equ	pagoff+020h	; console input buffer length
+coninrflg	equ	pagoff+022h	; console input redirection flag
+conoutrflg	equ	pagoff+024h	; console output redirection flag
+auxinrflg	equ	pagoff+026h	; auxillary input redirection flag
+auxoutrflg	equ	pagoff+028h	; auxillary output redirection flag
+listoutrflg	equ	pagoff+02ah	; list output redirection flag
+pagemode	equ	pagoff+02ch	; page mode flag 0=on, 0ffH=off
+pagedef		equ	pagoff+02dh	; page mode default
+ctlhact		equ	pagoff+02eh	; ctl-h active
+ruboutact	equ	pagoff+02fh	; rubout active (boolean)
+typeahead	equ	pagoff+030h	; type ahead active
+contran		equ	pagoff+031h	; console translation subroutine
+conmode		equ	pagoff+033h	; console mode (raw/cooked)
+tenbuffer	equ	pagoff+035h	; 128 byte buffer available
+					; to banked BIOS
+outdelim	equ	pagoff+037h	; output delimiter
+listcp		equ	pagoff+038h	; list output flag (ctl-p)
+qflag		equ	pagoff+039h	; queue flag for type ahead
+scbad		equ	pagoff+03ah	; system control block address
+dmaad		equ	pagoff+03ch	; dma address
+seldsk		equ	pagoff+03eh	; current disk
+info		equ	pagoff+03fh	; BDOS variable "info"
+resel		equ	pagoff+041h	; disk reselect flag
+relog		equ	pagoff+042h	; relog flag
+fx		equ	pagoff+043h	; function number
+usrcode		equ	pagoff+044h	; current user number
+dcnt		equ	pagoff+045h	; directory record number
+searcha		equ	pagoff+047h	; fcb address for searchn function
+searchl		equ	pagoff+049h	; scan length for search functions
+multcnt		equ	pagoff+04ah	; multi-sector I/O count
+errormode	equ	pagoff+04bh	; BDOS error mode
+drv0		equ	pagoff+04ch	; search chain - 1st drive
+drv1		equ	pagoff+04dh	; search chain - 2nd drive
+drv2		equ	pagoff+04eh	; search chain - 3rd drive
+drv3		equ	pagoff+04fh	; search chain - 4th drive
+tempdrv		equ	pagoff+050h	; temporary file drive
+patchflag	equ	pagoff+051h	; patch flags
+date		equ	pagoff+058h	; date stamp
+combase		equ	pagoff+05dh	; common memory base address
+error		equ	pagoff+05fh	; error jump...all BDOS errors
+toptpa		equ	pagoff+062h	; top of user TPA (address at 6,7)
+
+; CCP FLAG 1 BIT MASKS
+;(used with getflg, setflg and resetflg routines)
+
+chainflg	equ	080h		; program chain (funct 49)
+notchainflg	equ	03fh		; mask to reset chain flags
+chainenv	equ	040h		; preserve usr/drv for chained prog
+comredirect	equ	0b320h		; command line redirection active
+menu		equ	0b310h		; execute ccp.ovl for menu systems
+echo		equ	0b308h		; echo commands in batch mode
+userparse	equ	0b304h		; parse user numbers in commands
+subfile		equ	0b301h		; $$$.SUB file found or active
+subfilemask	equ	subfile-0b300h
+rsxonlyset	equ	02h		; RSX only load (null COM file)
+rsxonlyclr	equ 	0FDh		; reset RSX only flag
+
+; CCP FLAG 2 BIT MASKS
+; (used with getflg, setflg and resetflg routines)
+
+ccp10		equ	0b4a0h		; CCP function 10 call (2 bits)
+ccpsub		equ	0b420h		; CCP present (for SUBMIT, PUT, GET)
+ccpbdos		equ	0b480h		; CCP present (for BDOS buffer save)
+dskreset	equ	20h		; CCP does disk reset on ^C from prompt
+submit		equ	0b440h		; input redirection active
+submitflg	equ	40h		; input redirection flag value
+order		equ	0b418h		; command order
+					;  0 - COM only
+					;  1 - COM,SUB
+					;  2 - SUB,COM
+					;  3 - reserved
+datetime	equ	0b404h		; display date & time of load
+display		equ	0b403h		; display filename & user/drive
+filename	equ	02h		; display filename loaded
+location	equ	01h		; display user & drive loaded from
+
+; CCP FLAG 3 BIT MASKS
+; (used with getflg, setflg and resetflg routines)
+
+rsxload		equ	1h		; load RSX, don't fix chain
+coldboot	equ	2h		; try to exec profile.sub
+
+; CONMODE BIT MASKS
+
+ctlcstat	equ	0cf01h		;conmode CTL-C status
+
+;************************************************************************
+;
+;	Console Command Processor - Main Program
+;
+;************************************************************************
+
+start:
+	ld	sp,stack
+
+	ld	hl,ccpret		;push CCPRET on stack, in case of
+	push	hl			; profile error we will go there
+	ld	de,scbadd
+	ld	c,scbf
+	call	bdos
+	ld	(scbaddr),hl			;save SCB address
+	ld	l,combase+1
+	ld	a,(hl)			;high byte of commonbase
+	ld	(banked),a			;save in loader
+	ld	l,bdosbase+1		;HL addresses real BDOS page
+	ld	a,(hl)			;BDOS base in H
+	ld	(realdos),a			;save it for use in XCOM routine
+
+	ld	a,(osbase+1)		;is the LOADER in memory?
+	sub	(hl)			;compare link at 6 with real BDOS
+	jp	nz,resetalloc		;skip move if loader already present
+
+movldr:
+	ld	bc,rsxend-rsxstart	;length of loader RSX
+	call	calcdest	;calculate destination and (bias+200h)
+	ld	h,e		;set to zero
+	ld	l,e
+;	lxi	h,module-100h	;base of loader RSX (less 100h)
+	call	reloc		;relocate loader
+	ld	hl,(osbase)		;HL = BDOS entry, DE = LOADER base
+	ld	l,e		;set L=0
+	ld	c,6
+	call	move		;move the serial number down
+	ld	e,nextadd
+	call	fixchain1
+resetalloc:
+	ld	c,allocf
+	call	bdos
+
+;************************************************************************
+;
+;	INITIALIZE SYSTEM CONTROL BLOCK
+;
+;************************************************************************
+
+scbinit:
+	;	# dir columns, page size & function 9 delimiter
+	ld	b,conwidth
+	call	getbyte
+	inc	a		;get console width (rel 1)
+	rrca
+	rrca
+	rrca
+	rrca
+	and	0fh		;divide by 16
+	ld	de,dircols
+	ld	(de),a		;dircols = conwidth/16
+	ld	l,conpage
+	ld	a,(hl)
+	dec	a		;subtract 1 for space before prompt
+	inc	de
+	ld	(de),a		;pgsize = conpage
+	xor	a
+	inc	de
+	ld	(de),a		;line=0
+	ld	a,'$'
+	inc	de
+	ld	(de),a		;pgmode = nopage (>0)
+	ld	l,outdelim
+	ld	(hl),a		;set function 9 delimiter
+
+	; multisector count, error mode, console mode & BDOS version no.
+
+	ld	l,multcnt
+	ld	(hl),1 		;set multisector I/O count = 1
+	inc	hl		;.errormode
+	xor	a
+	ld	(hl),a		;set return error mode = 0
+	ld	l,conmode
+	ld	(hl),1		;set ^C status mode
+	inc	hl
+	ld	(hl),a		;zero 2nd conmode byte
+	ld	l,bdosversion
+	ld	(hl),vers		;set BDOS version no.
+	;
+	;	disk reset check
+	;
+	ld	l,ccpflag2
+	ld	a,(hl)
+	and	dskreset	;^C at CCP prompt?
+	ld	c,resetf
+	push	hl
+	call	nz,bdos		;perform disk reset if so
+	pop	hl
+	;
+	;	remove temporary RSXs (those with remove flag on)
+	;
+rsxck:
+	ld	l,ccpflag1	;check CCP flag for RSX only load
+	ld	a,(hl)
+	and	rsxonlyset	;bit = 1 if only RSX has been loaded
+	push	hl
+	call	z,rsxchain	;don't fix-up RSX chain if so
+	pop	hl
+	ld	a,(hl)
+	and	rsxonlyclr	;clear RSX only loader flag
+	ld	(hl),a		;replace it
+	;
+	;	chaining environment
+	;
+	and	chainenv	;non-zero if we preserve programs
+	push	hl		;user & drive for next transient
+	;
+	;	user number
+	;
+	ld	l,ccpusr	; HL = .CCP USER (saved in SCB)
+	ld	bc,usernum	; BC = .CCP'S DEFAULT USER
+	ld	d,h
+	ld	e,usrcode	; DE = .BDOS USER CODE
+	ld	a,(de)
+	ld	(bc),a		; usernum = bdos user number
+	ld	a,(hl)		; ccp user
+	jp	nz,scb1		; jump if chaining env preserved
+	ld	(bc),a		; usernum = ccp default user
+scb1:	ld	(de),a		; bdos user = ccp default user
+	;
+	;	transient program's current disk
+	;
+	inc	bc		;.CHAINDSK
+	ld	e,seldsk	;.BDOS CURRENT DISK
+	ld	a,(de)
+	jp	nz,scb2		; jump if chaining env preserved
+	ld	a,0ffh
+;	cma			; make an invalid disk
+scb2:	ld	(bc),a		; chaindsk = bdos disk (or invalid)
+	;
+	;	current disk
+	;
+	dec	hl		;.CCP's DISK (saved in SCB)
+	inc	bc		;.CCP's CURRENT DISK
+	ld	a,(hl)
+	ld	(bc),a
+	ld	(de),a		; BDOS current disk
+	;
+	;	$$$.SUB drive
+	;
+	ld	l,tempdrv
+	inc	bc 		;.SUBFCB
+	ld	a,(hl)
+	ld	(bc),a		; $$$.SUB drive = temporary drive
+	;
+	;	check for program chain
+	;
+	pop	hl		;HL =.ccpflag1
+	ld	a,(hl)
+	and	chainflg	;is it a chain function (47)
+	jp	z,ckboot		;jump if not
+	ld	hl,buf
+chain:	ld	de,cbufl
+	ld	c,tpa-buf-1
+	ld	a,c
+	ld	(de),a
+	inc	de
+	call	move		;hl = source, de = dest, c = count
+	jp	ccpparse
+	;
+	;	execute profile.sub ?
+	;
+ckboot:	ld	l,ccpflag3
+	ld	a,(hl)
+	and	coldboot	;is this a cold start
+	jp	nz,ccpcr		;jump if not
+	ld	a,(hl)
+	or	coldboot	;set flag for next time
+	ld	(hl),a
+	ld	(errflg),a		;set to ignore errors
+	ld	hl,profile
+	jp	chain		;attempt to exec profile.sub
+profile:
+	db	'PROFILE.S',0
+
+;************************************************************************
+;
+;	BUILT-IN COMMANDS (and errors) RETURN HERE
+;
+;************************************************************************
+
+ccpcr:
+	;	enter here on each command or error condition
+	call	setccpflg
+	call	crlf
+
+IF INCL$ALIAS$CMD$PROCESSOR
+	; Initialize the Alias command processor. See if the Alias command RSX module
+	; has been previously loaded in via the "aliasldr.com" program and from the
+	; aliases.cmd text file. The history buffer will be queried from the RSX module
+	; and saved locally for near-future access by the Alias command translator (aliastra.mac)
+	call	Init$Alias$Translator
+ENDIF
+
+	; Go ask the SETDIR RSX module whether it has any named directories to serve to us
+	ld	HL, 00
+	ld	(diradr), HL	; Named directory table from the RSX
+	ld	de,rsx$66
+	ld	c,60
+	call	bdos
+	or	a
+	jr	nz, ccpret	; RSX does not exist
+
+	ld	(diradr),HL	;save directory name table address
+
+ccpret:
+	ld	hl,stack-2	;reset stack in case of error
+	ld	sp,hl			;preserve CCPRET on stack
+	xor	a
+	ld	(line),a
+	ld	hl,ccpret	;return for next builtin
+	push	hl
+	call	setccpflg
+	dec	hl		;.CCPFLAG1
+	ld	a,(hl)
+	and	subfilemask	;check for $$$.SUB submit
+	jp	z,prompt
+
+;************************************************************************
+;
+;	$$$.SUB file processing
+;
+;************************************************************************
+
+	ld	de,cbufl		;set DMA to command buffer
+	call	setbuf
+	ld	c,openf
+	call	sudos		;open it if flag on
+	ld	c,cstatf	;check for break if successful open
+	call	z,sudos		;^C typed?
+	jp	nz,subclose	;delete $$$.SUB if break or open failed
+	ld	hl,subrr2
+	ld	(hl),a		;zero high random record #
+	dec	hl
+	ld	(hl),a		;zero middle random record #
+	dec	hl
+	push	hl
+	ld	a,(subrc)
+	dec	a
+	ld	(hl),a		;set to read last record of file
+	ld	c,rreadf
+	call	p,sudos
+	pop	hl
+	dec	(hl)		;record count (truncate last record)
+	ld	c,delf
+	call	m,sudos
+	or	a		;error on read?
+subclose:
+	push	af
+	ld	c,trunf		;truncate file (& close it)
+	call	sudos
+	pop	af		;any errors ?
+	jp	z,ccpparse	;parse command if not
+subkill:
+	ld	bc,subfile
+	call	resetflg	;turn off submit flag
+	ld	c,delf
+	call	sudos		;kill submit
+
+;************************************************************************
+;
+;	GET NEXT COMMAND
+;
+;************************************************************************
+
+; Prompt the user
+
+prompt:
+	; Print the drive number
+	call	dirdrv1
+
+; RCL9, I'm having the user number always printed out so that it looks similar to ZCPR/ZCCP
+	ld	a,(usernum)
+	; 	or	a
+	;	call	nz,pdb		;print user # if non-zero
+	call	pdb
+
+	;
+	; Optionally show the named directory as set by the SETDIR RSX module
+	;
+	ld	hl,(diradr)	;get directory name address
+	ld	a,h
+	or	l
+	jr	z,nodirnm
+	ex	de,hl
+	ld	hl,rootdrv	;point to drive returned by rootget
+rootloop:
+	call	rootget		;get an entry
+	jr	z,nodirnm	;jump if at end
+	ld	a,(disk)	;get current drive
+	cp	(hl)		;same as table entry?
+	jr	nz,rootloop
+	inc	hl		;point to user number from rootget
+	ld	a,(usernum)	;get current user
+	cp	(hl)		;same as table entry?
+	jr	z,rootok
+	dec	hl
+	jr	rootloop
+rootok:
+	ld	a,':'
+	call	putc		;display a colon
+	ld	hl,rootname	;point to directory name
+	ld	c,' '		;it terminates with a blank
+	call	pstrg		;print the directory name
+nodirnm:
+
+	ld	a,'>'
+	call	putc
+	;
+	if multi
+	;move ccpconbuf addr to conbuffer addr
+	ld	de,ccpconbuf*256+conbuffer
+	call	wordmov		;process multiple command, unless in submit
+	or	a		;non-zero => multiple commands active
+	push	af		;save A=high byte of ccpconbuf
+	ld	bc,ccpbdos
+	call	nz,resetflg	;turn off BDOS flag if multiple commands
+	endif
+	call	rcln		;get command line from console
+	call	resetccpflg	;turn off BDOS, SUBMIT & GET ccp flags
+	if multi
+	pop	af		;D=high byte of ccpconbuf
+	call	nz,multisave	;save multiple command buffer
+	endif
+
+	jp	ccpparse
+
+; Named directory support code from CCP105.MAC
+
+; Format of the final parsed buffer
+;	DIRNAME of 1 to 8 characters, ';', 0, (user-num << 8 | drive number)
+;	0
+
+rootget:
+	push	hl
+	push	de
+	ld	hl,rootname
+	ld	de,rootname+1
+	ld	c,17
+	ld	(hl),' '
+	call	move
+	pop	de
+	ld	hl,rootname
+	ld	b,8
+rootnmove:
+	ld	a,(de)
+	or	a
+	jr	z,rgetdone
+	inc	de
+	cp	';'
+	jr	z,getp
+	ld	(hl),a
+	inc	hl
+	djnz	rootnmove
+	ld	a,(de)
+	inc	de
+	cp	';'
+	jr	z,getp
+	xor	a
+	jr	rgetdone
+getp:
+	ld	hl,rootpass
+	ld	b,8
+rootpmove:
+	ld	a,(de)
+	inc	de
+	or	a
+	jr	z,rgetdu
+	ld	(hl),a
+	inc	hl
+	djnz	rootpmove
+	ld	a,(de)
+	inc	de
+	or	a
+	jr	z,rgetdu
+	xor	a
+	jr	rgetdone
+rgetdu:
+	ld	a,(de)
+	inc	de
+	ld	b,a
+	ld	hl,rootdrv
+	and	0fh
+	ld	(hl),a
+	inc	hl
+	ld	a,b
+	and	0f0h
+	rra
+	rra
+	rra
+	rra
+	ld	(hl),a
+	inc	a
+rgetdone:
+	pop	hl
+	ret
+
+; Print out all of the names in the named directory table to the console
+
+; Format of the final parsed buffer
+;	DIRNAME of 1 to 8 characters, ';', 0, (user-num << 8 | drive number)
+;	0
+
+Print$Named$Directories:
+	ld	hl,(diradr)	;get directory name address
+	ld	a,h
+	or	l
+	ret	z
+
+	push	hl
+	ld	hl, Empty$Space
+	ld	c,'$'
+	call	pstrg
+	pop	hl
+
+	ld	d, 3		; Column counter (based on empty space string length)
+loop$name:
+	ld	a, (hl)
+	or	a
+	jp	z, print$done
+
+	; Precount length of the string for CR/LF
+	ld	b, 0
+	push	hl
+count:	ld	a,(hl)		;get character
+	or	a
+	jr	z, done$count
+	cp	';'
+	jr	z, done$count
+	inc	b
+	inc	hl		;advance pointer
+	jr	count
+
+done$count:
+	inc	hl		; Skip over the semi-colon
+	inc	hl		; Skip over the NULL terminator
+
+	; Pick up the user number and drive number
+	ld	a, (hl)
+	and	0FH
+	add	a, 'A'
+	ld 	(temp$drive$num), a
+	ld	a, (hl)
+	and	0f0h
+	rra
+	rra
+	rra
+	rra
+	add	a, '0'
+	ld 	(temp$user$num), a
+	inc	hl		; Skip over the user number and drive number
+
+	; Are we at the end of the list?
+	ld	a, (hl)
+	ld	e, a		; Save it
+
+	pop	hl
+
+	ld	a, b		; Length of the directory name
+	inc	a		; Account for drive number
+	inc	a		; Account for user number
+	inc	a		; Account for colon
+	inc	a		; Account for comma
+	inc	a		; Account for space
+
+	push	af		; Save full length of the current directory name
+	add	a, d
+	ld	d, a
+	cp	MAX$COLUMNS-1
+	jr	c, no$wrap
+
+	; Wrap-around with CRLF
+	push	hl
+	push	de
+	call	crlf
+	ld	hl, Empty$Space
+	ld	c,'$'
+	call	pstrg
+	pop	de
+	pop	hl
+	pop	af
+	add	a, 3		; Based on empty space string length
+	ld	d, a		; Reset to the length of the string which we are just about to print
+	push	af
+
+no$wrap:
+	pop	af
+	push	hl
+	push	de
+	ld 	a, (temp$drive$num)
+	call	putc
+	ld 	a, (temp$user$num)
+	call	putc
+	ld 	a, ':'
+	call	putc		; Add a colon separator
+	pop	de
+	pop	hl
+
+	ld	c, ';'		; Print up to the semi-colon
+	call	pstrg		; Print the directory name
+
+	ld	a, e		; End of the list?
+	or	a
+	jr	z, end$list	; Yes
+
+	push	hl
+	ld	a,','
+	call	putc		; Add a comma separator
+
+	ld	a,' '
+	call	putc		; Add a whitespace
+
+	pop	hl
+
+end$list:
+	inc	hl		; Skip over the semi-colon
+	inc	hl		; Skip over the NULL terminator
+	inc	hl		; Skip over the user and drive number
+	jp	loop$name
+
+print$done:
+	call	crlf
+	ret
+
+Empty$Space:	db	'   $'
+
+
+;************************************************************************
+;
+;	PARSE COMMAND
+;
+;************************************************************************
+
+ccpparse:
+	;
+	;	reset default page mode
+	;	(in case submit terminated)
+	;
+	call	subtest		;non-zero if submit is active
+	jp	nz,getpgmode	;skip, if so
+setpgmode:
+	ld	l,pagedef
+	ld	a,(hl)		;pick up default
+	dec	hl
+	ld	(hl),a		;place in mode
+getpgmode:
+	ld	l,pagemode
+	ld	a,(hl)
+	ld	(pgmode),a
+
+IF INCL$ALIAS$CMD$PROCESSOR
+	; Nov 9 2026, RCL9, Call our new Alias command translator.
+	;
+	;   Out: A = 0, CY clear : the command was an alias; the line in the
+	;                          buffer has been replaced by the translated line.
+	;        A = 1, CY set   : the command is not an alias; the buffer has not
+	;                          been touched.
+	;        A = 2, CY set   : it is an alias but the translated line would be
+	;                          longer than 127 characters; the buffer has not
+	;                          been touched.
+	;
+	; Pick up the user's entered text (located at 0x80, 127 bytes max + NULL)
+	ld	hl,cbuf	; Point to start of the raw command line
+	call	trans
+ENDIF
+
+	;check for multiple commands
+	;convert to upper case
+	;reset ccp flag, in case entered from a CHAIN (or profile)
+	;
+	call	uc		;convert to upper case, ck if multiple command
+	ret	z			;get another line if null or comment
+	;
+	;transient or built-in command?
+	;
+	ld	de,ufcb		;include user number byte in front of FCB
+	call	gcmd		;parse command name
+	ld	a,(fcb+9)	;file type specified?
+	cp	' '
+	jp	nz,ccpdisk2	;execute from disk, if so
+	ld	hl,ufcb		;user or drive specified?
+	ld	a,(hl)		;user number
+	inc	hl
+	or	(hl)		;drive
+	inc	hl
+	ld	a,(hl)		;get 1st character of filename
+	jp	nz,ccpdisk3	;jump if so
+
+; BUILT-IN COMMAND HANDLER
+
+ccpbuiltin:
+	ld	hl,ctbl		;search table of internal commands
+	ld	de,fcb+1
+	ld	a,(fcb+3)
+	cp	' '+1		;is it shorter that 3 characters?
+	call	nc,tbls		;is it a built-in?
+	jp	nz,ccpdisk0	;load from disk if not
+	ld	a,(option)		;[ in command line?
+	or	a		;options specified?
+	ld	a,b		;built-in index from tbls
+	ld	hl,(parsep)
+	ld	(errsav),hl		;save beginning of command tail
+	ld	hl,ptbl		;jump to processor if options not
+	jp	z,tblj		;specified
+	cp	4
+	jp	c,trycom
+	ld	hl,fcb+4
+	jp	nz,ccpdisk0	;if DIRS then look for DIR.COM
+	ld	(hl),' '
+	;
+	;LOAD TRANSIENT (file type unspecified)
+	;
+ccpdisk0:
+	ld	bc,order
+	call	getflg		;0=COM   8=COM,SUB  16=SUB,COM
+	jp	z,ccpdisk2	;search for COM file only
+	ld	b,8		;=> 2nd choice is SUB
+	sub	b		;now a=0 (COM first) or 8 (SUB first)
+	jp	z,ccpdisk1	;search for COM first then SUB
+	ld	b,0		;search for SUB first then COM
+
+ccpdisk1:
+	push	bc		;save 2nd type to try
+	call	settype		; A = offset of type in type table
+	call	exec		;try to execute, return if unsuccessful
+	pop	af		;try 2nd type
+	call	settype
+	;
+	;LOAD TRANSIENT (file type specified)
+	;
+ccpdisk2:
+	call	exec
+	jp	perror		;error if can't find it
+	;
+	;DRIVE SPECIFIED (check for change drives/users command)
+	;
+ccpdisk3:
+	cp	' '		;check for filename
+	jp	nz,ccpdisk0	;execute from disk if specified
+	call	eoc		;error if not end of command
+	ld	a,(ufcb)		;user specified?
+	sub	1
+	jp	c,ccpdrive
+
+ccpuser:
+	ld	(usernum),a		;CCP's user number
+	ld	b,ccpusr
+	call	setbyte		;save it in SCB
+	call	setuser		;set current user
+
+ccpdrive:
+	ld	a,(fcb)		;drive specified?
+	dec	a
+	ret	m			;return if not
+	push	af
+	call	select
+	pop	af
+	ld	(disk),a		;CCP's drive
+	ld	b,ccpdrv
+	jp	setbyte		;save it in SCB
+
+;************************************************************************
+;
+;	BUILT-IN COMMANDS
+;
+;************************************************************************
+
+; Table of internal ccp commands
+
+ctbl:	db	'DIR '
+	db	'TYPE '
+	db	'ERASE '
+	db	'RENAME '
+	db	'DIRSYS '
+	db	'USER '
+	db	'CLS '
+	db	'DIRNAMES '
+	db	'LISTESC '
+IF INCL$ALIAS$CMD$PROCESSOR
+	; List all Aliases, one per line
+	db	'LSTALIAS '
+	; List all of the Alias names, on a single line
+	db	'ALIASNAM '
+ENDIF
+	db	0
+;
+ptbl:	dw	dir
+	dw	typecmd
+	dw	era
+	dw	ren
+	dw	dirs
+	dw	user
+	dw	clear$screen
+	dw	Print$Named$Directories
+	dw	List$ESC$Sequences
+IF INCL$ALIAS$CMD$PROCESSOR
+	dw	LISTTBL
+	dw	LISTNAM
+ENDIF
+
+;;-----------------------------------------------------------------------
+;;
+;;	CLEAR SCREEN Command - Added by RCL9 in Nov 2026
+;;
+;;-----------------------------------------------------------------------
+
+clear$screen:
+	ld	hl,Clear$Screen$Sequence
+	ld	c,0
+	call	pstrg
+	ret
+
+;;-----------------------------------------------------------------------
+;;
+;;	List the terminal ESC sequences of the Exidy Sorcerer - Added by RCL9 in Nov 2026
+;;
+;;-----------------------------------------------------------------------
+
+List$ESC$Sequences:
+	ld	hl, ESC$Sequence$EXMON3
+	ld	c,0
+	call	pstrg
+	ret
+
+;;-----------------------------------------------------------------------
+;;
+;;	DIR Command
+;;
+;;	DIR		list directory of current default user/drive
+;;	DIR <X>:	list directory of user/drive <X>
+;;	DIR <AFN>	list all files on the current default user/drive
+;;			with names that match <AFN>
+;;	DIR <X>:<AFN>	list all files on user/drive <X> with names that
+;;			match <AFN>
+;;
+;;-----------------------------------------------------------------------
+
+	if newdir
+dirdrv:
+	ld	a,(dfcb)		;get disk number
+	endif
+
+dirdrv0:
+	dec	a
+	jp	p,dirdrv2
+
+dirdrv1:
+	ld	a,(disk)		;get current disk
+dirdrv2:
+	add	a,'A'
+	jp	pfc		;print it (save BC,DE)
+;
+;
+	if newdir
+dir:
+	ld	c,0		;flag for DIR (normal)
+	ld	de,sysfiles
+	jp	dirs1
+;
+;
+dirs:
+	ld	c,080h		;flag for DIRS (system)
+	ld	de,dirfiles
+
+dirs1:	push	de
+
+; [JCE] Patch 15
+	xor	a		;Reset "anyfiles" before starting
+	ld	(anyfiles),a	; - it might not have been cleared
+
+	call	direct
+	pop	de		;de = .system files message
+	jp	z,nofile		;jump if no files found
+	ld	a,l		;A = number of columns
+	cp	b		;did we print any files?
+	call	nc,crlf		;print crlf if so
+	ld	hl,anyfiles
+	dec	(hl)
+	inc	(hl)
+	ret	z			;return if no files
+				;except those requested
+	dec	(hl)		;set to zero
+	jp	pmsgnl		;tell the operator other files exist
+;
+;
+direct:
+	push	bc		;save DIR/DIRS flag
+	call	sbuf80		;set DMA = 80h
+	call	gfn		;parse file name
+	ld	de,dfcb+1
+	ld	a,(de)
+	cp	' '
+	ld	b,11
+	call	z,setmatch	;use "????????.???" if none
+	call	eoc		;make sure there's nothing else
+	call	srchf		;search for first directory entry
+	pop	bc
+	ret	z			;if no files found
+dir0:
+	ld	a,(dircols)		;number of columns for dir
+	ld	l,a
+	ld	b,a
+	inc	b		;set # names to print per line (+1)
+dir1:
+	push	hl		;L=#cols, B=curent col, C=dir/dirs
+	ld	hl,10		;get byte with SYS bit
+	add	hl,de
+	ld	a,(hl)
+	pop	hl
+	and	80h		;look at SYS bit
+	cp	c		;DIR/DIRS flag in C
+	jp	z,dir2		;display, if modes agree
+	ld	a,1		;set anyfiles true
+	ld	(anyfiles),a
+	jp	dir3		;don't print anything
+;
+;	display the filename
+;
+dir2:
+	dec	b
+	call	z,dirln		;sets no. of columns, puts crlf
+	ld	a,b		;number left to print on line
+	cp	l		;is current col = number of cols
+	call	z,dirdrv		;display the drive, if so
+	ld	a,':'
+	call	pfc		;print colon
+	call	space
+	call	pfn		;print file name
+	call	space		;pad with space
+dir3:
+	push	bc		;save current col(B), DIR/DIRS(C)
+	push	hl		;save number of columns(L)
+	call	break		;drop out if keyboard struck
+	call	srchn		;search for another match
+	pop	hl
+	pop	bc
+	jp	nz,dir1
+direx:
+	inc	a		;clear zero flag
+	ret
+
+	else
+
+dirs:	; display system files only
+	ld	a,0d2h		; JNC instruction
+	ld	(dir11),a		; skip on non-system files
+;
+dir:	; display non-system files only
+	ld	hl,ccpcr
+	push	hl		; push return address
+	call	gfn		;parse file name
+	inc	de
+	ld	a,(de)
+	cp	' '
+	ld	b,11
+	call	z,setmatch	;use "????????.???" if none
+	call	eoc		;make sure there's nothing else
+	call	findone		;search for first directory entry
+	jp	z,dir4
+	ld	b,5		;set # names to print per line
+dir1:	ld	hl,10		;get byte with SYS bit
+	add	hl,de
+	ld	a,(hl)
+	rla			;look at SYS bit
+dir11:	jp	c,dir3		;don't print it if SYS bit set
+	ld	a,b
+	push	bc
+dir2:	ld	hl,9		;get byte with R/O bit
+	add	hl,de
+	ld	a,(hl)
+	rla			;look at R/O bit
+	ld	a,' '		;print space if not R/O
+	jp	nc,dir21		;jump if not R/O
+	ld	a,'*'		;print star if R/O
+dir21:	call	pfc		;print character
+	call	pfn		;print file name
+	ld	a,13		;figure out how much padding is needed
+	sub	c
+dir25:	push	af
+	call	space		;pad it out with spaces
+	pop	af
+	dec	a
+	jp	nz,dir25		;loop if more required
+	pop	bc
+	dec	b		;decrement # names left on line
+	jp	nz,dir3
+	call	crlf		;go to new line
+	ld	b,5		;set # names to print on new line
+dir3:	push	bc
+	call	break		;drop out if keyboard struck
+	call	srchn		;search for another match
+	pop	bc
+	jp	nz,dir1
+
+dir4:	ld	a,0dah		;JC instruction
+	ld	(dir11),a		;restore normal dir mode (skip system files)
+	jp	ccpcr
+
+	endif
+
+;;-----------------------------------------------------------------------
+;;
+;;	TYPE command
+;;
+;;	TYPE <UFN>	Print the contents of text file <UFN> on
+;;			the console.
+;;
+;;-----------------------------------------------------------------------
+
+typecmd:
+	ld	hl,ccpcr
+	push	hl		;push return address
+	call	getfn		;get and parse filename
+	ld	a,127		;initialize buffer pointer
+	ld	(bufp),a
+	ld	c,openf
+	call	sbdosf		;open file if a filename was typed
+type1:	call	break		;exit if keyboard struck
+	call	getb		;read byte from file
+	ret	nz		;exit if physical eof or read error
+	cp	eof		;check for eof character
+	ret	z			;exit if so
+	call	putc		;print character on console and ask "Press Return to continue" for each page
+	jp	type1		;loop
+
+;;-----------------------------------------------------------------------
+;;
+;;	USER command
+;;
+;;	USER <NN>	Set the user number
+;;
+;;-----------------------------------------------------------------------
+
+user:
+	ld	de,unmsg		;Enter User #:
+	call	getprm
+	call	gdn		;convert to binary
+	ret	z			;return if nothing typed
+	jp	ccpuser		;set user number
+
+;;-----------------------------------------------------------------------
+;;
+;;	ERA command
+;;
+;;	ERA <AFN>	Erase all file on the current user/drive
+;;			which match <AFN>.
+;;	ERA <X>:<AFN>	Erase all files on user/drive <X> which
+;;			match <AFN>.
+;;
+;;-----------------------------------------------------------------------
+
+era:	call	getfn		;get and parse filename
+	jp	z,era1
+	call	ckafn		;is it ambiguous?
+	jp	nz,era1
+	ld	de,eramsg
+	call	pmsg
+	ld	hl,(errorp)
+	ld	c,' '		;stop at exclamation mark or 0
+	call	pstrg		;echo command
+	ld	de,confirm
+	call	getc
+	call	crlf
+	ld	a,l		;character in L after CRLF routine
+	and	5fh		;convert to U/C
+	cp	'Y'		;Y (yes) typed?
+	ret	nz			;return, if not
+	or	a		;reset zero flag
+era1:	ld	c,delf
+	jp	sbdosf
+
+;;-----------------------------------------------------------------------
+;;
+;;
+;;	REN command
+;;
+;;-----------------------------------------------------------------------
+
+ren:	call	gfn		;zero flag set if nothing entered
+	push	af
+	ld	hl,16
+	add	hl,de
+	ex	de,hl
+	push	de		;DE = .dfcb+16
+	push	hl		;HL = .dfcb
+	ld	c,16
+	call	move		;DE = dest, HL = source
+	call	gfn
+	pop	hl		;HL=.dfcb
+	pop	de		;DE=.dfcb+16
+	call	drvok
+	ld	c,renf		;make rename call
+	pop	af		;zero flag set if nothing entered
+
+;;-----------------------------------------------------------------------
+;;
+;;	BUILT-IN COMMAND BDOS CALL & ERROR HANDLERS
+;;
+;;-----------------------------------------------------------------------
+
+sbdosf:
+	push	af
+	call	nz,eoc		;make sure there's nothing else
+	pop	af
+	ld	de,dfcb
+	ld	b,0ffh
+	ld	h,1		;execute disk command if we don't call
+	call	nz,bdosf		;call if something was entered
+	ret	nz			;return if successful
+
+ferror:
+	dec	h		;was it an extended error?
+	jp	m,nofile
+	ld	hl,(errsav)
+	ld	(parsep),hl
+trycom:	call	exec
+	call	pfn
+	ld	de,required
+	jp	builtinerr
+
+;;-----------------------------------------------------------------------
+;	check for drive conflict
+;	HL =  FCB
+;	DE =  FCB+16
+
+drvok:	ld	a,(de)		;get byte from 2nd fcb
+	cp	(hl)		;ok if they match
+	ret	z
+	or	a		;ok if 2nd is 0
+	ret	z
+	inc	(hl)		;error if the 1st one's not 0
+	dec	(hl)
+	jp	nz,perror
+	ld	(hl),a		;copy from 2nd to 1st
+	ret
+
+;;-----------------------------------------------------------------------
+;;
+;;	check for ambiguous reference in file name/type
+;;
+;;	entry:	b  = length of string to check (ckafn0)
+;;		de = fcb area to check (ckafn0) - 1
+;;	exit:	z  = set if any ? in file reference (ambiguous)
+;;		z  = clear if unambiguous file reference
+
+ckafn:
+		ld	b,11		;check entire name and type
+ckafn0:		inc	de
+		ld	a,(de)
+		cp	'?'		;is it an ambiguous file name
+if newera
+		ret	z			;return true if any afn
+else
+		ret	nz			;return true only if *.*
+endif
+		dec	b
+		jp	nz,ckafn0
+if newera
+		dec	b		;clear zero flag to return false
+endif
+		ret			;remove above DCR to return true
+
+;;-----------------------------------------------------------------------
+;;
+;;	get parameter (generally used to get a missing one)
+
+getprm:
+	call	skps		;see if already there
+	ret	nz			;return if so
+getp0:
+	if prompts
+	push	de
+	ld	de,enter
+	call	pmsg
+	pop	de
+	endif
+	call	pmsg		;print prompt
+	call	rcln		;get response
+	jp	uc		;convert to upper case
+
+;;-----------------------------------------------------------------------
+	if	not newdir
+;;
+;;	search for first file, print "No File" if none
+
+findone:
+	call	srchf
+	ret	nz			;found
+	endif
+;;-----------------------------------------------------------------------
+
+nofile:
+	ld	de,nomsg		;tell user no file found
+builtinerr:
+	call	pmsgnl
+	jp	ccpret
+
+;************************************************************************
+;
+;	EXECUTE DISK RESIDENT COMMAND
+;
+;************************************************************************
+
+xfcb:	db	0,'SUBMIT  COM'	;processor fcb
+
+;	execute submit file  (or any other processor)
+
+xsub:				;DE = .fcb
+	ld	a,(de)
+	ld	b,clpdrv
+	call	setbyte		;save submit file drive
+	ld	hl,xfcb
+	ld	c,12
+	call	move		;copy processor into fcb
+	ld	hl,cbufl		;set parser pointer back to beginning
+	ld	(hl),' '
+	inc	hl		;move past blank
+	ld	(parsep),hl
+
+; Execute SUBMIT.COM
+
+; Execute disk resident command (return if not found or error)
+
+exec:
+	;try to open and execute fcb
+	ld	de,fcb+9
+	ld	hl,typtbl
+	call	tbls		;search for type in type table
+	ret	nz			;return if no match
+	ld	de,ufcb
+	ld	a,(de)		;check to see if user specified
+	or	a
+	ret	nz			;return if so
+	inc	de
+	ld	a,(de)		;check if drive specified
+	ld	c,a
+	push	bc		;save type (B) and drive (C)
+	ld	c,0		;try only 1 open if drive specified
+	or	a
+	jp	nz,exec1		;try to open as specified
+	ld	bc,0+(drv0-1)*256+4;try upto four opens from drv chain
+	ld	a,(disk)
+	inc	a
+	ld	h,a		;save default disk in H
+	ld	l,1		;allow only 1 match to default disk
+exec0:	inc	b		;next drive to try in SCB drv chain
+	dec	c		;any more tries?
+	ld	a,c
+	push	hl
+	call	p,getbyte
+	pop	hl
+	or	a
+	jp	m,exec3
+	jp	z,exec01		;jump if drive is 0 (default drive)
+	cp	h		;is it the default drive
+	jp	nz,exec02		;jump if not
+exec01:	ld	a,h		;set drive explicitly
+	dec	l		;is it the 2nd reference
+	jp	m,exec0		;skip, if so
+exec02:	ld	(de),a		;put drive in FCB
+exec1:	push	bc		;save drive offset(B) & count(C)
+	push	hl
+	call	opencom		;on default drive & user
+	pop	hl
+	pop	bc
+	jp	z,exec0		;try next if open unsuccessful
+
+;	successful open, now jump to processor
+
+exec2:
+	if	dayfile
+	ld	bc,display
+	call	getflg
+	jp	z,exec21
+	ld	a,(de)
+	call	dirdrv0
+	ld	a,':'
+	call	pfc
+	push	de
+	call	pfn
+	pop	de
+	push	de
+	ld	hl,8
+	add	hl,de
+	ld	a,(hl)
+	and	80h
+	ld	de,userzero
+	call	nz,pmsg
+	call	crlf
+	pop	de
+	endif
+exec21:	pop	af		;recover saved command type
+	ld	hl,xptbl
+
+;	table jump
+;
+;	entry:	hl = address of table of addresses
+;		a  = entry # (0 thru n-1)
+
+tblj:	add	a,a		;adjust for two byte entries
+	call	addhla		;compute address of entry
+	push	de
+	ld	e,(hl)		;fetch entry
+	inc	hl
+	ld	d,(hl)
+	ex	de,hl
+	pop	de
+	jp	(hl)			;jump to it
+;
+typtbl:	db	'COM '
+	db	'SUB '
+	db	'PRL '
+	db	0
+;
+xptbl:	dw	xcom
+	dw	xsub
+	dw	xcom
+
+;	unsuccessful attempt to open command file
+
+exec3:	pop	bc		;recover drive
+	ld	a,c
+	ld	(de),a		;replace in fcb
+	ret
+;
+;
+settype:
+	;set file type specified from type table
+	;a = offset (x2) of desired type (in bytes)
+	rrca
+	ld	hl,typtbl
+	call	addhla		;hl = type in type table
+	ld	de,fcb+9
+	ld	c,3
+	jp	move		;move type into fcb
+
+;	EXECUTE COM FILE
+
+xcom:				;DE = .fcb
+	;
+	;	set up FCB for loader to use
+	;
+	ld	hl,tpa
+	ld	(fcbrr),hl		;set load address to 100h
+	ld	hl,(realdos-1)	;put fcb in the loader's stack
+	dec	h		;page below LOADER (or bottom RSX)
+	ld	l,0C0h		;offset for FCB in page below the BDOS
+	push	hl		;save for LOADER call
+	ld	a,(de)		;get drive from fcb(0)
+	ld	(cmdrv),a		;set command drive field in base page
+	ex	de,hl
+	ld	c,35
+	call	move		;now move FCB to the top of the TPA
+	;
+	;	set up base page
+	;
+	ld	hl,errflg	;tell parser to ignore errors
+	inc	(hl)
+xcom3:	ld	hl,(parsep)
+	dec	hl		;backup over delimiter
+	ld	de,buf+1
+	ex	de,hl
+	ld	(parsep),hl		;set parser to 81h
+	call	copy0		;copy command tail to 81h with
+				;terminating 0 (returns A=length)
+	ld	(buf),a		;put command tail length at 80h
+xcom5:	call	gfn		;parse off first argument
+	ld	(pass0),hl
+	ld	a,b
+	ld	(len0),a
+	ld	de,dfcb1
+	call	gfn0		;parse off second argument
+	ld	(pass1),hl
+	ld	a,b
+	ld	(len1),a
+xcom7:	ld	hl,chaindsk		;.CHAINDSK
+	ld	a,(hl)
+	or	a
+	call	p,select
+	ld	a,(usernum)
+	call	setuser		;set default user, returns H=SCB
+	add	a,a		;shift user to high nibble
+	add	a,a
+	add	a,a
+	add	a,a
+	ld	l,seldsk
+	or	(hl)		;put disk in low nibble
+	ld	(defdrv),a		;set location 4
+	;
+	; 	initialize stack
+	;
+xcom8:	pop	de			;DE = .fcb
+	ld	hl,(realdos-1)		;base page of BDOS
+	xor	a
+	ld	l,a			;top of stack below BDOS
+	ld	sp,hl				;change the stack pointer for CCP
+	ld	h,a			;push warm start address on stack
+	push	hl			;for programs returning to the CCP
+	inc	h			;Loader will return to TPA
+	push	hl			;after loading a transient program
+	;
+	;	initialize fcb0(CR), console mode, program return code
+	;	& removable media open and login vectors
+	;
+xcom9:	ld	(7ch),a			;clear next record to read
+	ld	b,conmode
+	call	setbyte			;set to zero (turn off ^C status)
+	ld	l,olog
+	ld	(hl),a			;zero removable open login vector
+	inc	hl
+	ld	(hl),a
+	inc	hl
+	ld	(hl),a			;zero removable media login vector
+	inc	hl
+	ld	(hl),a
+	ld	l,ccpflag1
+	ld	a,(hl)
+	and	chainflg		;chaining?
+	jp	nz,loader			;load program without clearing
+	ld	l,progretcode		;the program return code
+	ld	(hl),a			;A=0
+	inc	hl
+	ld	(hl),a			;set program return = 0000h
+	;
+	;	call loader
+	;
+loader:
+	ld	a,(hl)			;reset chain flag if set,
+	and	notchainflg		;has no effect if we fell through
+	ld	(hl),a
+	ld	c,loadf			;use load RSX to load file
+	jp	bdos			;now load it
+
+;************************************************************************
+;
+;	BDOS FUNCTION INTERFACE - Non FCB functions
+;
+;************************************************************************
+
+;;-----------------------------------------------------------------------
+;;
+;;	print character on terminal
+;;	pause if screen is full
+;;	(BDOS function #2)
+;;
+;;	entry:	a  = character (putc entry)
+;;		e  = character (putc2 entry)
+
+putc:	cp	lf		;end of line?
+	jp	nz,putc1		;jump if not
+	ld	hl,pgsize	;.pgsize
+	ld	a,(hl)		;check page size
+	inc	hl		;.line
+	inc	(hl)		;line=line+1
+	sub	(hl)		;line=page?
+	jp	nz,putc0
+	ld	(hl),a		;reset line=0 if so
+	inc	hl		;.pgmode
+	ld	a,(hl)		;is page mode off?
+	or	a		;page=0 if so
+	ld	de,more
+	call	z,getc		;wait for input if page mode on
+	cp	ctrlc
+	jp	z,ccpcr
+	ld	e,cr
+	call	putc2		;print a cr
+putc0:	ld	a,lf		;print the end of line char
+putc1:	ld	e,a
+putc2:	ld	c,coutf
+	jp	bdos
+
+;;-----------------------------------------------------------------------
+;;
+;;	get character from console
+;;	(BDOS function #1)
+
+getc:	call	pmsg
+getc1:	ld	c,cinf
+	jp	bdos
+
+;;-----------------------------------------------------------------------
+;;
+;;	print message string on terminal
+;;	(BDOS function #9)
+
+pmsg:	ld	c,pbuff
+	jp	bdos
+
+;;-----------------------------------------------------------------------
+;;	read line from console
+;;	(calls BDOS function #10)
+;;
+;;	exit:	z  = set if null line
+;;
+;;	This function uses the buffer "cbuf" (see definition of
+;;	function 10 for a description of the buffer).  All input
+;;	is converted to upper case after reading and the pointer
+;;	"parsep" is set to the begining of the first non-white
+;;	character string.
+
+rcln:	ld	hl,cbufmx	;get line from terminal
+	ld	(hl),comlen	;set maximum buffer size
+	ex	de,hl
+	ld	c,rbuff
+	call	bdos
+	ld	hl,cbufl		;terminate line with zero byte
+	ld	a,(hl)
+	inc	hl
+	call	addhla
+	ld	(hl),0		;put zero at the end
+	jp	crlf		;advance to next line
+
+;;-----------------------------------------------------------------------
+;;
+;;	exit routine if keyboard struck
+;;	(calls BDOS function #11)
+;;
+;;	Control is returned to the caller unless the console
+;;	keyboard has a character ready, in which case control
+;;	is transfer to the main program of the CCP.
+
+break:	call	break1
+	ret	z
+	jp	ccpcr
+
+break1:	ld	c,cstatf
+	call	rw
+	ret	z
+	ld	c,cinf
+	jp	rw
+
+;;-----------------------------------------------------------------------
+;;
+;;	set disk buffer address
+;;	(BDOS function #26)
+;;
+;;	entry:	de -> buffer ("setbuf" only)
+
+sbuf80:	ld	de,buf
+setbuf:	ld	c,dmaf
+	jp	bdos
+
+;;-----------------------------------------------------------------------
+;;
+;;	select disk
+;;	(BDOS function #14)
+;;
+;;	entry:	a  = drive
+
+select:
+	ld	e,a
+	ld	c,self
+	jp	bdos
+
+;;-----------------------------------------------------------------------
+;;
+;;	set user number
+;;	(BDOS function #32)
+;;
+;;	entry:	a  = user #
+;;	exit:	H  = SCB page
+
+setuser:
+	ld	b,usrcode
+	jp	setbyte
+
+;************************************************************************
+;
+;	BDOS FUNCTION INTERFACE - Functions with a FCB Parameter
+;
+;************************************************************************
+;;
+;;	open file
+;;	(BDOS function #15)
+;;
+;;	exit:	z  = set if file not found
+;;
+opencom:			;open command file (SUB, COM or PRL)
+	ld	bc,openf		;b=0 => return error mode of 0
+	ld	de,fcb		;use internal FCB
+
+;;	BDOS CALL ENTRY POINT   (used by built-ins)
+;;
+;;	entry:	b  = return error mode (must be 0 or 0ffh)
+;;		c  = function no.
+;;		de = .fcb
+;;	exit:	z  = set if error
+;;		de = .fcb
+
+bdosf:	ld	hl,32		;offset to current record
+	add	hl,de		;HL = .current record
+	ld	(hl),0		;set to zero for read/write
+	push	bc		;save function(C) & error mode(B)
+	push	de		;save .fcb
+	ld	a,(de)		;was a disk specified?
+	and	b		;and with 0 or 0ffh
+	dec	a		;if so, select it in case
+	call	p,select		;of permanent error (if errmode = 0ffh)
+	ld	de,passwd
+	call	setbuf		;set dma to password
+	pop	de		;restore .fcb
+	pop	bc		;restore function(C) & error mode(B)
+	push	de
+	ld	hl,(scbaddr)
+	ld	l,errormode
+	ld	(hl),b		;set error mode
+	push	hl		;save .errormode
+	call	bdos
+	pop	de		;.errormode
+	xor	a
+	ld	(de),a		;reset error mode to 0
+	ld	a,(disk)
+	ld	e,seldsk
+	ld	(de),a		;reset current disk to default
+	push	hl		;save bdos return values
+	call	sbuf80
+	pop	hl		;bdos return
+	inc	l		;set z flag if error
+	pop	de		;restore .fcb
+	ret
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	close file
+;;	(BDOS function #16)
+;;
+;;	exit:	z  = set if close error
+;;
+;;close:	mvi	c,closef
+;;		jmp	oc
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	delete file
+;;
+;;	exit:	z  = set if file not found
+;;
+;;	The match any character "?" may be used without restriction
+;;	for this function.  All matched files will be deleted.
+;;
+;;
+;;delete:
+;;	mvi	c,delf
+;;	jmp	oc
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	create file
+;;	(BDOS function #22)
+;;
+;;	exit:	z  = set if create error
+;;
+;;make:		mvi	c,makef
+;;		jmp	oc
+;;-----------------------------------------------------------------------
+;;
+;;	search for first filename match (using "DFCB" and "BUF")
+;;	(BDOS function #17)
+;;
+;;	exit:	z  = set if no match found
+;;		z  = clear if match found
+;;		de -> directory entry in buffer
+;;
+srchf:	ld	c,searf		;set search first function
+	jp	srch
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	search for next filename match (using "DFCB" and "BUF")
+;;	(BDOS function #18)
+;;
+;;	exit:	z  = set if no match found
+;;		z  = clear if match found
+;;		de -> directory entry in buffer
+;;
+srchn:	ld	c,searnf	;set search next function
+srch:	ld	de,dfcb		;use default fcb
+	call	bdos
+	inc	a		;return if not found
+	ret	z
+	dec	a		;restore original return value
+	add	a,a		;shift to compute buffer pos'n
+	add	a,a
+	add	a,a
+	add	a,a
+	add	a,a
+	ld	hl,buf		;add to buffer start address
+	call	addhla
+	ex	de,hl			;de -> entry in buffer
+	xor	a		;may be needed to clear z flag
+	dec	a		;depending of value of "buf"
+	ret
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	read file
+;;	(BDOS function #20)
+;;
+;;	entry:	hl = buffer address (readb only)
+;;	exit	z  = set if read ok
+;;
+read:	xor	a		;clear getc pointer
+	ld	(bufp),a
+	ld	c,readf
+	ld	de,dfcb
+rw:	call	bdos
+	or	a
+	ret
+;
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	$$$.SUB interface
+;;
+;;	entry:	c = bdos function number
+;;	exit	z  = set if successful
+
+sudos:	ld	de,subfcb
+	jp	rw
+;
+;
+;
+;************************************************************************
+;
+;	COMMAND LINE PARSING SUBROUTINES
+;
+;************************************************************************
+;
+;------------------------------------------------------------------------
+;
+;	COMMAND LINE PREPARSER
+;	reset function 10 flag
+;	set up parser
+;	convert to upper case
+;
+;	All input is converted to upper case and the pointer
+;	"parsep" is set to the begining of the first non-blank
+;	character string.  If the line begins with a ; or :, it
+;	is treated specially:
+;
+;		;	comment 	the line is ignored
+;		:	conditional	the line is ignored if a fatal
+;					error occured during the previous
+;					command, otherwise the : is
+;					ignored
+;
+;	An exclamation point is used to separate multiple commands on a
+;	a line.  Two adjacent exclaimation points translates into a single
+;	exclaimation point in the command tail for compatibility.
+;------------------------------------------------------------------------
+;
+;
+uc:
+	call	resetccpflg		; HL = .SCB
+	ex	de,hl			; DE = .SCB
+	xor	a
+	ld	(option),a		;zero option flag
+	ld	hl,cbuf
+	call	skps1		;skip leading spaces/tabs
+	ex	de,hl
+	cp	';'		;HL = .scb
+	ret	z
+	cp	'!'
+	jp	z,uc0
+	cp	':'
+	jp	nz,uc1
+
+	ld	l,progretcode
+
+;[JCE] this fragment rewritten not to trash the program return code when reading it.
+	ld	a, (hl)		;[JCE]
+	inc	a		;[JCE]
+	inc	a		;[JCE] ;was ^C typed? (low byte 0FEh)
+
+	jp	z,uc0		;successful, if so
+	inc	hl
+
+	ld	a, (hl)		; [JCE]
+	inc	a		; [JCE]
+;	inc	(hl)		;is high byte 0FFh?
+
+	ret	z			;skip command, if so
+uc0:	inc	de		;skip over 1st character
+uc1:	ex	de,hl			;HL=.command line
+	ld	(parsep),hl		;set parse pointer to beginning of line
+uc3:	ld	a,(hl)		;convert lower case to upper
+	cp	'['
+	jp	nz,uc4
+	ld	(option),a		;'[' is the option delimiter => command option
+uc4:	cp	'a'
+	jp	c,uc5
+	cp	'z'+1
+	jp	nc,uc5
+	sub	'a'-'A'
+	ld	(hl),a
+uc5:
+	if multi
+	cp	'!'
+	call	z,multistart	;HL=.char, A=char
+	endif
+	inc	hl		;advance to next character
+	or	a		;loop if not end of line
+	jp	nz,uc3
+;
+;	skip spaces
+;	return with zero flag set if end of line
+;
+skps:	ld	hl,(parsep)		;get current position
+skps1:	ld	(parsep),hl		;save position
+	ld	(errorp),hl		;save position for error message
+	ld	a,(hl)
+	or	a		;return if end of command
+	ret	z
+	cp	' '
+	jp	z,skps2
+	cp	tab		;skip spaces & tabs
+	ret	nz
+skps2:	inc	hl		;advance past space/tab
+	jp	skps1		;loop
+;
+;-----------------------------------------------------------------------
+;
+;	MULTIPLE COMMANDS PER LINE HANDLER
+;
+;-----------------------------------------------------------------------
+	if multi
+
+multistart:
+	;
+	;	A  = current character in command line
+	;	HL = address of current character in command line
+	;
+	;double exclaimation points become one
+	ld	e,l
+	ld	d,h
+	inc	de
+	ld	a,(de)
+	cp	'!'		;double exclaimation points
+	push	af
+	push	hl
+	call	z,copy0		;convert to one, if so
+	pop	hl
+	pop	af
+	ret	z
+	;we have a valid multiple command line
+	ld	(hl),0		;terminate command line here
+	ex	de,hl
+	;multiple commands not allowed in submits
+	;NOTE: submit unravels multiple commands making the
+	;following test unnecessary.  However, with GET[system]
+	;or CP/M 2.2 SUBMIT multiple commands will be posponed
+	;until the entire submit completes...
+;	call	subtest		;submit active
+;	mvi	a,0
+;	rnz			;return with A=0, if so
+	;set up the RSX buffer
+	ld	hl,(osbase)		;get high byte of TPA address
+	dec	h		;subtract 1 page for buffer
+	ld	l,endchain	;HL = RSX buffer base-1
+	ld	(hl),a		;set end of chain flag to 0
+	push	hl		;save it
+multi0:	inc	hl
+	inc	de
+	ld	a,(de)		;get character from cbuf
+	ld	(hl),a		;place in RSX
+	cp	'!'
+	jp	nz,multi1
+	ld	(hl),cr		;change exclaimation point to cr
+multi1:	or	a
+	jp	nz,multi0
+	ld	(hl),cr		;end last command with cr
+	inc	hl
+	ld	(hl),a		;terminate with a zero
+	;set up RSX prefix
+	ld	l,6		;entry point
+	ld	(hl),0C3h		;put a jump instruction there
+	inc	hl
+	ld	(hl),9		;make it a jump to base+9 (RSX exit)
+	inc	hl
+	ld	(hl),h
+	inc	hl		;HL = RSX exit point
+	ld	(hl),0C3h		;put a jump instruction there
+	ld	l,warmflg	;HL = remove on warm start flag
+	ld	(hl),a		;set (0) for RSX to remain resident
+	ld	l,a		;set low byte to 0 for fixchain
+	ex	de,hl			;DE = RSX base
+	call	fixchain	;add the RSX to the chain
+	;save buffer address
+	ld	hl,(scbaddr)
+	ld	l,ccpconbuf	;save buffer address in CCP conbuf field
+	pop	de		;DE = RSX base
+	inc	de
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	ld	l,multirsxpg
+	ld	(hl),d		;save the RSX base
+	xor	a		;zero in a to fall out of uc
+	ret
+	;
+	;
+	;	save the BDOS conbuffer address and
+	;	terminate RSX if necessary.
+	;
+multisave:
+	ld	de,conbuffer*256+ccpconbuf
+	call	wordmov		;first copy conbuffer in case SUBMIT
+	or	a		;and/or GET are active
+	ld	de,conbuffl*256+ccpconbuf
+	call	z,wordmov		;if conbuff is zero then conbufl has the
+	push	hl		;next address
+	call	break1
+	pop	hl		;H = SCB page
+	ld	l,ccpconbuf
+	jp	nz,multiend
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)		;DE = next conbuffer address
+	inc	(hl)
+	dec	(hl)		;is high byte zero?
+	dec	hl		;HL = .ccpconbuf
+	jp	z,multiend	;remove multicmd RSX if so
+	ld	a,(de)		;check for terminating zero
+	or	a
+	ret	nz			;return if not
+	;
+	;	we have exhausted all the commands
+multiend:
+	;	HL = .ccpconbuf
+	xor	a
+	ld	(hl),a		;set buffer to zero
+	inc	hl
+	ld	(hl),a
+	ld	l,multirsxpg
+	ld	h,(hl)
+	ld	l,0eh		;HL=RSX remove on warmstart flag
+	dec	(hl)		;set to true for removal
+	jp	rsxchain	;remove the multicmd rsx buffer
+
+	endif
+;;
+;************************************************************************
+;
+;	FILE NAME PARSER
+;
+;************************************************************************
+;
+;
+;
+;	get file name (read in if none present)
+;
+;
+;;	The file-name parser in this CCP implements
+;;	a user/drive specification as an extension of the normal
+;;	CP/M drive selection feature.  The syntax of the
+;;	user/drive specification is given below.  Note that a
+;;	colon must follow the user/drive specification.
+;;
+;;	<a>:	<a> is an alphabetic character A-P specifing one
+;;		of the CP/M disk drives.
+;;
+;;	<n>:	<n> is a decimal number 0-15 specifying one of the
+;;		user areas.
+;;
+;;	<n><a>:	A specification of both user area and drive.
+;;
+;;	<a><n>:	Synonymous with above.
+;;
+;;	Note that the user specification cannot be included
+;;	in the parameters of transient programs or precede a file
+;;	name.  The above syntax is parsed by gcmd (get command).
+;;
+;; ************************************************************
+
+getfn:
+	if prompts
+	ld	de,fnmsg
+getfn0:
+	call	getprm
+	endif
+gfn:	ld	de,dfcb
+gfn0:	call	skps		;sets zero flag if eol
+	push	af
+	call	gfn2
+	pop	af
+	ret
+	;
+	;	BDOS FUNCTION 152 INTERFACE
+	;
+	;entry:	DE = .FCB
+	;	HL = .buffer
+	;flags/A reg preserved
+	;exit:  DE = .FCB
+	;
+	;
+gfn2:	ld	(parsep),hl
+	ld	(errorp),hl
+	push	de		;save .fcb
+	ld	de,pfncb
+	ld	c,parsef
+if func152
+	call	bdos
+else
+	call	parse
+endif
+	pop	de		;.fcb
+	ld	a,h
+	or	l		;end of command? (HL = 0)
+	ld	b,(hl)		;get delimiter
+	inc	hl		;move past delimiter
+	jp	nz,gfn3
+	ld	hl,zero+2	;set HL = .0
+gfn3:	ld	a,h
+	or	l		;parse error? (HL = 0ffffh)
+	jp	nz,gfn4
+	ld	hl,zero+2
+	call	perror
+gfn4:	ld	a,b
+	cp	'.'
+	jp	nz,gfn6
+	dec	hl
+gfn6:	ld	(parsep),hl		;update parse pointer
+gfnpwd:	ld	c,16
+	ld	hl,pfcb
+	push	de
+	call	move
+	ld	de,passwd	;HL = .disk map in pfcb
+	ld	c,10
+	call	move		;copy to passwd
+	pop	de		;HL = .password len
+	ld	a,(hl)
+zero:	ld	hl,0		;must be an "lxi h,0"
+	or	a		;is there a password?
+	ld	b,a
+	jp	z,gfn8
+	ld	hl,(errorp)		;HL = .filename
+gfn7:	ld	a,(hl)
+	cp	';'
+	inc	hl
+	jp	nz,gfn7
+gfn8:	ret			;B = len, HL = .password
+
+;
+;	PARSE CP/M 3 COMMAND
+;	entry:	DE  = .UFCB  (user no. byte in front of FCB)
+;		PARSEP = .command line
+gcmd:
+	push	de
+	xor	a
+	ld	(de),a		;clear user byte
+	inc	de
+	ld	(de),a		;clear drive byte
+	inc	de
+	call	skps		;skip leading spaces
+;
+;	Begin by looking for user/drive-spec.  If none is found,
+;	fall through to main file-name parsing section. If one is found
+;	then branch to the section that handles them.  If an error occurs
+;	in the user/drive spec; treat it as a filename for compatibility
+;	with CP/M 2.2.  (e.g. STAT VAL: etc.)
+;
+	ld	hl,(parsep)		;get pointer to current parser position
+	pop	de
+	push	de		;DE = .UFCB
+	ld	b,4		;maximum length of user/drive spec
+gcmd1:	ld	a,(hl)		;get byte
+	cp	':'		;end of user/drive-spec?
+	jp	z,gcmd2		;parse user/drive if so
+	or	a		;end of command?
+	jp	z,gcmd8		;parse filename (Func 152), if so
+
+	cp	9		;[JCE] Patch 12, bug in "P B:" type commands
+	jr	z, gcmd8	;[JCE]
+	cp	' '		;[JCE]
+	jr	z, gcmd8	;[JCE]
+
+	dec	b		;maximum user/drive spec length exceeded?
+	inc	hl
+	jp	nz,gcmd1		;loop if not
+	;
+	;	Parse filename, type and password
+	;
+gcmd8:
+	pop	de
+	xor	a
+	ld	(de),a		;set user = default
+	ld	hl,(parsep)
+gcmd9:	inc	de		;past user number byte
+	ld	a,(de)		;A=drive
+	push	af
+	call	gfn2		;BDOS function 152 interface
+	pop	af
+	ld	(de),a
+	ret
+	;
+	;	Parse the user/drive-spec
+	;
+gcmd2:
+	ld	hl,(parsep)		;get pointer to beginning of spec
+	ld	a,(hl)		;get character
+gcmd3:	cp	'0'		;check for user number
+	jp	c,gcmd4		;jump if not numeric
+	cp	'9'+1
+	jp	nc,gcmd4
+	call	gdns		;get the user # (returned in B)
+	pop	de
+	push	de
+	ld	a,(de)		;see if we already have a user #
+	or	a
+	jp	nz,gcmd8		;skip if we do
+	ld	a,b		;A = specified user number
+	inc	a		;save it as the user-spec
+	ld	(de),a
+	jp	gcmd5
+gcmd4:	cp	'A'		;check for drive-spec
+	jp	c,gcmd8		;skip if not a valid drive character
+	cp	'P'+1
+	jp	nc,gcmd8
+	pop	de
+	push	de
+	inc	de
+	ld	a,(de)		;see if we already have a drive
+	or	a
+	jp	nz,gcmd8		;skip if so
+	ld	a,(hl)
+	sub	'@'		;convert to a drive-spec
+	ld	(de),a
+	inc	hl
+gcmd5:	ld	a,(hl)		;get next character
+	cp	':'		;end of user/drive-spec?
+	jp	nz,gcmd3		;loop if not
+	inc	hl
+	pop	de		;.ufcb
+	jp	gcmd9		;parse the file name
+
+
+;
+;************************************************************************
+;
+;		TEMPORARY PARSE CODE
+;
+;************************************************************************
+;
+if not func152
+;	version 3.0b  Oct 08 1982 - Doug Huskey
+;
+;
+
+passwords	equ	true
+
+parse:	; DE->.(.filename,.fcb)
+	;
+	; filename = [d:]file[.type][;password]
+	;
+	; fcb assignments
+	;
+	;   0     => drive, 0 = default, 1 = A, 2 = B, ...
+	;   1-8   => file, converted to upper case,
+	;            padded with blanks (left justified)
+	;   9-11  => type, converted to upper case,
+	;	     padded with blanks (left justified)
+	;   12-15 => set to zero
+	;   16-23 => password, converted to upper case,
+	;	     padded with blanks
+	;   26    => length of password (0 - 8)
+	;
+	; Upon return, HL is set to FFFFH if DE locates
+	;            an invalid file name;
+	; otherwise, HL is set to 0000H if the delimiter
+	;            following the file name is a 00H (NULL)
+	; 	     or a 0DH (CR);
+	; otherwise, HL is set to the address of the delimiter
+	;            following the file name.
+	;
+	ex	de,hl
+	ld	e,(hl)		;get first parameter
+	inc	hl
+	ld	d,(hl)
+	push	de		;save .filename
+	inc	hl
+	ld	e,(hl)		;get second parameter
+	inc	hl
+	ld	d,(hl)
+	pop	hl		;DE=.fcb  HL=.filename
+	ex	de,hl
+parse0:
+	push	hl		;save .fcb
+	xor	a
+	ld	(hl),a		;clear drive byte
+	inc	hl
+	ld	bc,20h*256+11
+	call	pad		;pad name and type w/ blanks
+	ld	bc,4
+	call	pad		;EXT, S1, S2, RC = 0
+	ld	bc,20h*256+8
+	call	pad		;pad password field w/ blanks
+	ld	bc,12
+	call	pad
+	call	skip
+;
+;	check for drive
+;
+	ld	a,(de)
+	cp	':'		;is this a drive?
+	dec	de
+	pop	hl
+	push	hl		;HL = .fcb
+	jp	nz,parsename
+;
+;	Parse the drive-spec
+;
+parsedrv:
+	ld	a,(de)		;get character
+	and	5fh		;convert to upper case
+	sub	'A'
+	jp	c,perr1
+	cp	16
+	jp	nc,perr1
+	inc	de
+	inc	de		;past the ':'
+	inc	a		;set drive relative to 1
+	ld	(hl),a		;store the drive in FCB(0)
+;
+;	Parse the file-name
+;
+parsename:
+	inc	hl		;HL = .fcb(1)
+	call	delim
+	jp	z,parseok
+if passwords
+	ld	bc,7*256
+else
+	ld	b,7
+endif
+parse6:	ld	a,(de)		;get a character
+	cp	'.'		;file-type next?
+	jp	z,parsetype	;branch to file-type processing
+	cp	';'
+	jp	z,parsepw
+	call	gfc		;process one character
+	jp	nz,parse6		;loop if not end of name
+	jp	parseok
+;
+;	Parse the file-type
+;
+parsetype:
+	inc	de		;advance past dot
+	pop	hl
+	push	hl		;HL =.fcb
+	ld	bc,9
+	add	hl,bc		;HL =.fcb(9)
+if passwords
+	ld	bc,2*256
+else
+	ld	b,2
+endif
+parse8:	ld	a,(de)
+	cp	';'
+	jp	z,parsepw
+	call	gfc		;process one character
+	jp	nz,parse8		;loop if not end of type
+;
+parseok:
+	pop	bc
+	push	de
+	call	skip
+	call	delim
+	pop	hl
+	ret	nz
+	ld	hl,0
+	or	a
+	ret	z
+	cp	cr
+	ret	z
+	ex	de,hl
+	ret
+;
+;	handle parser error
+;
+perr:
+	pop	bc			;throw away return addr
+perr1:
+	pop	bc
+	ld	hl,0ffffh
+	ret
+;
+if passwords
+;
+;	Parse the password
+;
+parsepw:
+	inc	de
+	pop	hl
+	push	hl
+	ld	bc,16
+	add	hl,bc
+	ld	bc,7*256+1
+parsepw1:
+	call	gfc
+	jp	nz,parsepw1
+	ld	a,7
+	sub	b
+	pop	hl
+	push	hl
+	ld	bc,26
+	add	hl,bc
+	ld	(hl),a
+	ld	a,(de)			;delimiter in A
+	jp	parseok
+else
+;
+;	skip over password
+;
+parsepw:
+	inc	de
+	call	delim
+	jp	nz,parsepw
+	jp	parseok
+endif
+;
+;	get next character of name, type or password
+;
+gfc:	call	delim		;check for end of filename
+	ret	z			;return if so
+	cp	' '		;check for control characters
+	inc	de
+	jp	c,perr		;error if control characters encountered
+	inc	b		;error if too big for field
+	dec	b
+	jp	m,perr
+if passwords
+	inc	c
+	dec	c
+	jp	nz,gfc1
+endif
+	cp	'*'		;trap "match rest of field" character
+	jp	z,setwild
+gfc1:	ld	(hl),a		;put character in fcb
+	inc	hl
+	dec	b		;decrement field size counter
+	or	a		;clear zero flag
+	ret
+;;
+setwild:
+	ld	(hl),'?'		;set match one character
+	inc	hl
+	dec	b
+	jp	p,setwild
+	ret
+;
+;	skip spaces
+;
+skip0:	inc	de
+skip:	ld	a,(de)
+	cp	' '		;skip spaces & tabs
+	jp	z,skip0
+	cp	tab
+	jp	z,skip0
+	ret
+;
+;	check for delimiter
+;
+;	entry:	A = character
+;	exit:	z = set if char is a delimiter
+;
+delimiters:	db	cr,tab,' .,:;[]=<>|',0
+
+delim:	ld	a,(de)		;get character
+	push	hl
+	ld	hl,delimiters
+delim1:	cp	(hl)		;is char in table
+	jp	z,delim2
+	inc	(hl)
+	dec	(hl)		;end of table? (0)
+	inc	hl
+	jp	nz,delim1
+	or	a		;reset zero flag
+delim2:	pop	hl
+	ret	z
+	;
+	;	not a delimiter, convert to upper case
+	;
+	cp	'a'
+	ret	c
+	cp	'z'+1
+	jp	nc,delim3
+	and	05fh
+delim3:	and	07fh
+	ret			;return with zero set if so
+;
+;	pad with blanks
+;
+pad:	ld	(hl),b
+	inc	hl
+	dec	c
+	jp	nz,pad
+	ret
+;
+endif
+;
+;
+;************************************************************************
+;
+;	SUBROUTINES
+;
+;************************************************************************
+;
+	if multi
+;
+;	copy SCB memory word
+;	d = source offset e = destination offset
+;
+wordmov:
+	ld	hl,(scbaddr)
+	ld	l,d
+	ld	d,h
+	ld	c,2
+;
+	endif
+;
+;	copy memory bytes
+;	de = destination  hl = source  c = count
+;
+move:
+	ld	a,(hl)
+	ld	(de),a 		;move byte to destination
+	inc	hl
+	inc	de		;advance pointers
+	dec	c		;loop if non-zero
+	jp	nz,move
+	ret
+;
+;	copy memory bytes with terminating zero
+;	hl = destination  de = source
+;	returns c=length
+
+copy0:	ld	c,0
+copy1:	ld	a,(de)
+	ld	(hl),a
+	or	a
+	ld	a,c
+	ret	z
+	inc	hl
+	inc	de
+	inc	bc
+	jp	copy1
+
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	get byte from file
+;;
+;;	exit:	z  = set if byte gotten
+;;		a  = byte read
+;;		z  = clear if error or eof
+;;		a  = return value of bdos read call
+;;
+getb:	xor	a		;clear accumulator
+	ld	hl,bufp		;advance buffer pointer
+	inc	(hl)
+	call	m,read		;read sector if buffer empty
+	or	a
+	ret	nz			;return if read error or eof
+	ld	a,(bufp)		;compute pointer into buffer
+	ld	hl,buf
+	call	addhla
+	xor	a		;set zero flag
+	ld	a,(hl)		;get byte
+	ret
+;;
+;;-----------------------------------------------------------------------
+;;
+;;
+;;	system control block flag routines
+;;
+;;	entry:	c  = bit mask (1 bit on)
+;;		b  = scb byte offset
+;;
+subtest:
+	ld	bc,submit
+getflg:
+;	return flag value
+;	exit:	zero flag set if flag reset
+;		c  = bit mask
+;		hl = flag byte address
+;
+	ld	hl,(scbaddr)
+	ld	l,b
+	ld	a,(hl)
+	and	c 		; a = bit
+	ret
+;
+setccpflg:
+	ld	bc,ccp10
+
+;
+setflg:
+;	set flag on (bit = 1)
+;
+	call	getflg
+	ld	a,c
+	or	(hl)
+	ld	(hl),a
+	ret
+;
+resetccpflg:
+	ld	bc,ccp10
+;
+resetflg:
+;	reset flag off (bit = 0)
+;
+	call	getflg
+	ld	a,c
+	cpl
+	and	(hl)
+	ld	(hl),a
+	ret
+;;
+;;
+;;	SET/GET SCB BYTE
+;;
+;;	entry:	 A  = byte ("setbyte" only)
+;;		 B  = SCB byte offset from page
+;;
+;;	exit:	 A  = byte ("getbyte" only)
+;;
+setbyte:
+	ld	hl,(scbaddr)
+	ld	l,b
+	ld	(hl),a
+	ret
+;
+getbyte:
+	ld	hl,(scbaddr)
+	ld	l,b
+	ld	a,(hl)
+	ret
+;
+
+
+
+;;-----------------------------------------------------------------------
+;;
+;;
+;;	print message followed by newline
+;;
+;;	entry:	de -> message string
+;;
+pmsgnl:	call	pmsg
+;
+;	print crlf
+;
+dirln:	ld	b,l			;number of columns for DIR
+crlf:	ld	a,cr
+	call	pfc
+	ld	a,lf
+	jp	pfc
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	print decimal byte
+;;
+pdb:	sub	10
+	jp	c,pdb2
+	ld	e,'0'
+pdb1:	inc	e
+	sub	10
+	jp	nc,pdb1
+	push	af
+	call	putc2
+	pop	af
+pdb2:	add	a,10+'0'
+	jp	putc
+;;-----------------------------------------------------------------------
+;;
+;;	print string terminated by 0 or char in c
+;;
+pstrg:	ld	a,(hl)		;get character
+	or	a
+	ret	z
+	cp	c
+	ret	z
+	call	pfc		;print character
+	inc	hl		;advance pointer
+	jp	pstrg		;loop
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	check for end of command (error if extraneous parameters)
+;;
+eoc:	call	skps
+	ret	z
+;
+;	handle parser error
+;
+perror:
+	ld	hl,errflg
+	ld	a,(hl)
+	or	a		;ignore error????
+	ld	(hl),0		;clear error flag
+	ret	nz			;yes...just return to CCPRET
+	ld	hl,(errorp)		;get pointer to what we're parsing
+	ld	c,' '
+	call	pstrg
+perr2:	ld	a,'?'		;print question mark
+	call	putc
+	jp	ccpcr
+;
+;;-----------------------------------------------------------------------
+;;
+;;
+;;	print error message and exit processor
+;;
+;;	entry:	bc -> error message
+;;
+;;msgerr:	push	b
+;;	call	crlf
+;;	pop	d
+;;	jmp	pmsgnl
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	get decimal number (0 <= N <= 255)
+;;
+;;	exit:	a  = number
+;;
+gdn:	call	skps		;skip initial spaces
+	ld	hl,(parsep)		;get pointer to current character
+	ld	(errorp),hl		;save in case of parsing error
+	ret	z			;return if end of command
+	ld	a,(hl)		;get it
+	cp	'0'		;error if non-numeric
+	jp	c,perror
+	cp	'9'+1
+	jp	nc,perror
+	call	gdns		;convert number
+	ld	(parsep),hl		;save new position
+	or	1		;clear zero and carry flags
+	ld	a,b
+	ret
+;
+gdns:	ld	b,0
+gdns1:	ld	a,(hl)
+	sub	'0'
+	ret	c
+	cp	10
+	ret	nc
+	push	af
+	ld	a,b		;multiply current accumulator by 10
+	add	a,a
+	add	a,a
+	add	a,b
+	add	a,a
+	ld	b,a
+	pop	af
+	inc	hl		;advance to next character
+	add	a,b		;add it in to the current accumulation
+	ld	b,a
+	cp	16
+	jp	c,gdns1		;loop unless >=16
+	jp	perror		;error if invalid user number
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	print file name
+;;
+	if newdir
+pfn:	inc	de		;point to file name
+	ld	h,8		;set # characters to print, clear # printed
+	call	pfn1		;print name field
+	call	space
+	ld	h,3		;set # characters to print
+pfn1:	ld	a,(de)		;get character
+	and	7fh
+	call	pfc		;print it if not
+	inc	de		;advance pointer
+	dec	h		;loop if more to print
+	jp	nz,pfn1
+	ret
+;
+space:	ld	a,' '
+;
+pfc:	push	bc
+	push	de
+	push	hl
+	call	putc
+	pop	hl
+	pop	de
+	pop	bc
+	ret
+
+	else
+
+pfn:	inc	de		;point to file name
+	ld	bc,8*256		;set # characters to print, clear # printed
+	call	pfn1		;print name field
+	ld	a,(de)		;see if there's a type
+	and	7fh
+	cp	' '
+	ret	z			;return if not
+	ld	a,'.'		;print dot
+	call	pfc
+	ld	b,3		;set # characters to print
+pfn1:	ld	a,(de)		;get character
+	and	7fh
+	cp	' '		;is it a space?
+	call	nz,pfc		;print it if not
+	inc	de		;advance pointer
+	dec	b		;loop if more to print
+	jp	nz,pfn1
+	ret
+;
+space:	ld	a,' '
+;
+pfc:	inc	c		;increment # characters printed
+	push	bc
+	push	de
+	call	putc
+	pop	de
+	pop	bc
+	ret
+	endif
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	add a to hl
+;;
+addhla:	add	a,l
+	ld	l,a
+	ret	nc
+	inc	h
+	ret
+;;
+;;-----------------------------------------------------------------------
+;;
+;;	set match-any string into fcb
+;;
+;;	entry:	de -> fcb area
+;;		b  = # bytes to set
+;;
+setmatch:
+	ld	a,'?'		;set match one character
+setm1:	ld	(de),a		;fill rest of field with match one
+	inc	de
+	dec	b		;loop if more to fill
+	jp	nz,setm1
+	or	a
+	ret
+
+;;-----------------------------------------------------------------------
+;;
+;;	table search
+;;
+;;	Search table of strings separated by spaces and terminated
+;;	by 0.  Accept abbreviations, but set string = matched string
+;;	on exit so that we don't try to execute abbreviation.
+;;
+;;	entry:	de -> string to search for
+;;		hl -> table of strings to match (terminate table with 0)
+;;	exit:	z  = set if match found
+;;		a  = entry # (0 thru n-1)
+;;		z  = not set if no match found
+
+tbls:	ld	bc,0ffh		;clear entry & entry length counters
+tbls0:	push	de		;save match string addr
+	push	hl		;save table string addr
+tbls1:	ld	a,(de)		;compare bytes
+	and	7fh		;kill upper bit (so SYS + R/O match)
+	cp	' '+1		;end of search string?
+	jp	c,tbls2		;skip compare, if so
+	cp	(hl)
+	jp	nz,tbls3		;jump if no match
+tbls2:	inc	de		;advance string pointer
+	inc	c		;increment entry length counter
+	ld	a,' '
+	cp	(hl)
+	inc	hl		;advance table pointer
+	jp	nz,tbls1		;continue with this entry if more
+	pop	hl		;HL = matched string in table
+	pop	de		;DE = string address
+	call	move		; C = length of string in table
+	ld	a,b		;return current entry counter value
+	ret
+;
+tbls3:	ld	a,' '		;advance hl past current string
+tbls4:	cp	(hl)
+	inc	hl
+	jp	nz,tbls4
+	pop	de		;throw away last table address
+	pop	de		;DE = string address
+	inc	b		;increment entry counter
+	ld	c,0ffh
+	ld	a,(hl)		;check for end of table
+	sub	1
+	jp	nc,tbls0		;loop if more entries to test
+	ret
+;
+;************************************************************************
+
+IF INCL$ALIAS$CMD$PROCESSOR
+	; Inline our new command aliasing mechanism of Nov 2026
+	INCLUDE	ALIASTRA
+ENDIF
+
+;************************************************************************
+;
+;	DATA AREA
+;
+;************************************************************************
+
+;Note uninitialized data placed at the end (DS)
+
+; This is a handy print-out via the new "listesc" internal command of the Exidy Sorcerer's
+; ESC sequences for EXMON3 by Walter Blady.
+ESC$Sequence$EXMON3:
+	db	'Terminal ESC sequences for the Exidy Sorcerer and the EXMON3 monitor ROM:',cr,lf
+	db	'ESC = (line+32) (column+32) - Direct cursor positioning',cr,lf
+	db	'ESC 1 - Clear to end of line',cr,lf
+	db	'ESC 2 - Clear to end of screen',cr,lf
+	db	'ESC 3 - Clear entire line and move the bottom lines up',cr,lf
+	db	'ESC 4 - Set highlight on',cr,lf
+	db	'ESC 5 - Set highlight off',cr,lf
+	db	'ESC 6 - Generate reverse ASCII set',cr,lf
+	db	'ESC 7 - Restore user graphics',cr,lf
+	db	cr,lf
+	db	'CR = Move to start of the line',cr,lf
+	db	'LF = Move cursor down to the next line',cr,lf
+	db	'Ctrl-Z = cursor down',cr,lf
+	db	'Ctrl-A = cursor left',cr,lf
+	db	'Ctrl-H = backspace',cr,lf
+	db	'Ctrl-W = cursor up',cr,lf
+	db	'Ctrl-Q = home cursor',cr,lf
+	db	'Ctrl-S = cursor right',cr,lf
+	db	'Ctrl-\ (leave graphics intact)',cr,lf
+	db	'0x0c = Clear screen',cr,lf
+	db	'0xFF = Init video graphics RAM and clear screen',cr,lf,0
+
+; RSXPB passed to the RSX module
+rsx$66:	db	66
+	db	0		; Number of parameters words passed to the RSX
+
+; Supporting variables for named directories
+diradr:	dw	0		; Pointer to the named directory list provided by the SETDIR RSX module
+rootname:	ds	9
+rootpass:	ds	9
+rootdrv:	ds	1
+rootusr:	ds	1
+
+Clear$Screen$Sequence:
+	db	0CH, 0		; Clear screen command for the Exidy Sorcerer
+
+temp$user$num:	db	0
+temp$drive$num:	db	0
+
+	if	prompts
+enter:	db	'Enter $'
+unmsg:	db	'User #: $'
+fnmsg:	db	'File: $'
+	else
+unmsg:	db	'Enter User #: $'
+	endif
+nomsg:	db	'No File$'
+required:
+	db	' required$'
+eramsg:
+	db	'ERASE $'
+confirm:
+	db	' (Y/N)? $'
+more:	db	cr,lf,cr,lf,'Press RETURN to Continue $'
+	if	dayfile
+userzero:	db	'  (User 0)$'
+	endif
+
+	if 	newdir
+anyfiles:	db	0	;flag for SYS or DIR files exist
+dirfiles:	db	'NON-'
+sysfiles:	db	'SYSTEM FILE(S) EXIST$'
+	endif
+
+errflg:	db	0		;parse error flag
+	if multi
+multibufl:
+	dw	0		;multiple commands buffer length
+	endif
+scbadd:	db	scbad-pagoff,0
+
+;********** CAUTION FOLLOWING DATA MUST BE IN THIS ORDER *********
+
+pfncb:				;BDOS func 152 (parse filename)
+parsep:	dw	0		;pointer to current position in command
+pfnfcb:	dw	pfcb		;.fcb for func 152
+usernum:			;CCP current user
+	db	0
+chaindsk:
+	db	0		;transient's current disk
+disk:	db	0		;CCP current disk
+subfcb:	db	1,'$$$     SUB',0
+ccpend:				;end of file (on disk)
+	ds	1
+submod:	ds	1
+subrc:	ds	1
+	ds	16
+subcr:	ds	1
+subrr:	ds	2
+subrr2:	ds	1
+
+dircols:
+	ds	1		;number of columns for DIR/DIRS
+pgsize:	ds	1		;console page size
+line:	ds	1		;console line #
+pgmode:	ds	1		;console page mode
+
+;*****************************************************************
+
+errorp:	ds	2		;pointer to beginning of current param.
+errsav:	ds	2		;pointer to built-in command tail
+bufp:	ds	1		;buffer pointer for getb
+realdos:
+	ds	1		;base page of BDOS
+;
+option:	ds	1		;'[' in line?
+passwd:	ds	10		;password
+ufcb:	ds	1		;user number (must procede fcb)
+FCB:
+	ds	1		; drive code
+	ds	8		; file name
+	ds	3		; file type
+	ds	4		; control info
+	ds	16		; disk map
+fcbcr:	ds	1		; current record
+fcbrr:	ds	2		; random record
+pfcb:	ds	36		; fcb for parsing
+
+; 	command line buffer
+
+cbufmx:	ds	1
+cbufl:	ds	1
+cbuf:	ds	comlen
+	ds	50h
+stack:
+ccptop: 		;top page of CCP
+;	check equate for end of CCP (forward reference to ccpend)
+equ12	equ	ccpend    ;This should be 0D80h
+	end
+
+

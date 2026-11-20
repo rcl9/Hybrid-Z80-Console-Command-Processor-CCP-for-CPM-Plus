@@ -1,0 +1,67 @@
+; =======================================================================
+  title	'Common Definitions for the Alias Command Processor'
+; =======================================================================
+
+; These are common definitions shared between the Alias command file loader and its RSX module
+
+; Written by RCL9, November 2026
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+
+; The size of the Alias command table
+Len$Alias$CMD$Table	equ	256
+
+; Known / documented RSX 'function numbers' Used by third party software:
+; 	https://www.seasip.info/Cpm/rsxcalls.html
+;
+; 00h (0) LIOS.RSX
+;	(Digital Research) - Initialize LIOS: Used to initialize the RSX containing device-dependent code with no parameter checking.
+; 01h (1) ANSIRSX.RSX
+;	(Amstrad PCW ANSI Emulation) - Terminate RSX: Terminates the currently running RSX. Takes parameters pointing to a copy of the RSX name.
+; 04h (4) BYE5.RSX
+;	Remote Bulletin Board System utility) - Return BYE Active Status: Returns `0` if the remote BYE utility is active, or `0FFh` otherwise.
+; 07h (7) BYE5.RSX
+;	Return BYE Control Block Address - Returns the memory address (`HL`) of the BYE configuration/control block (`MXUSR`, timeouts, flags)
+; 0Bh (11) BYE5.RSX
+;	Delete RSXs Below BYE - Cleans up and deletes any resident system extensions loaded underneath the BYE RSX
+; 37h (55) HISTRSX.RSX
+;	(Command History RSX) - Initialize History - Initializes the command history buffer or deletes it if it is already active.
+; 38h (56) HISTRSX.RSX
+;	Clear History - Empties the command history buffer
+; 41h (65) LBR.RSX
+;	(LBRDISK / Z-System Utilities) - Print Directory Name: Used to print the name of a mounted library file acting as a directory (preceded by a backslash)
+; 42h (66) DIR.RSX
+;	(CCP+ Named Directories) - Return Directory RSX Address: Returns the memory address of the named directory system RSX.
+; 65h (101) BYE5.RSX
+;	Initialize BYE: Sets up and launches the remote access/modem environment parameters
+; 66h (102) BYE5.RSX
+;	Terminate BYE: Safely terminates the BYE RSX and logs out the current remote caller.
+; 70h to 82h - Various programs (refer to the HTML poage for more info)
+; A0h - Save.RSX
+
+; The "Function Number" of our Alias command processor RSX. These are semi-randomly chosen
+; so there is always a possibility of collision with another CPM3 RSX module.
+;
+; Initialize the RSX (either start it up or delete the existing module)
+RSX$Initialize$Fn$Num		equ	4Dh
+; Get the Alias command buffer pointer into HL
+RSX$GetBufferPtr$Fn$Num		equ	4Eh
+; This command is passed into the RSX module to self-delete itself
+RSX$Delete$Fn$Num		equ	4Fh
+
+; ---- constants (ASCII codes and the BDOS entry) ------------------------
+
+QUOTE	EQU	27H		; the single-quote character '
+SEMI	EQU	3BH		; the semicolon ; which starts a comment line
+CR	EQU	0DH		; carriage return
+LF	EQU	0AH		; line feed
+TAB	EQU	09H		; tab character
+BLANK	EQU	20H		; space character
+EOF	EQU	1AH		; CP/M end-of-file marker (Control-Z)
+PCT	EQU	25H		; the percent sign %
+COLON	EQU	3AH		; the colon : that ends a drive/user prefix
+MAXUSR	EQU	15		; highest CP/M user number accepted in a prefix
+MAXLN	EQU	127		; longest command line: 80H buffer = 127 characters + a zero
+BDOS	EQU	0005H		; address to CALL for CP/M BDOS services
+CWRITE	EQU	2		; BDOS function 2 = write one character to console

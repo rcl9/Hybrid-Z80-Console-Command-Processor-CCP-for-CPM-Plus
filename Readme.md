@@ -1,24 +1,8 @@
-Index.html overview:
-
-A "Newly Revised, Hybrid" Z80-Based CCP (Console Command Processor) for CP/M 3 
-
-40 years after the fact I am making available my newly revised (hybrid) CCP (console command processor) for CP/M+ (CP/M 3). The CCP is similar in concept and usage to that of the MSDOS command prompt and the x86 cmd.exe. This system is beneficial for those whom cannot run a banked CP/M 3 system with lots of available memory, such as is the case with my non-banked 52k Exidy Sorcerer. In short, its primary benefits over existing solutions of the mid to late 1990s are:
-
-- Based on my Z80-port of the original Digital Research CCP, with all commands & fixes/patches added.
-- ZCPR3-like command aliases (very fast, no disk access)
-- ZCPR3-like named directories  (very fast, no disk access)
-- Command recall  (very fast, no disk access)
-- No reliance on either NzCOM, Z3Plus or ZPM. 
-
-Secondly, this repo provides:
-
-- Runtime files to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as code fixes to SAlias.com v1.6 for Z3Plus.
-- A good primer and well documented code on how to write a medium-complexity RSX module for the CP/M 3 operating system.
-- A complementary subset of my highly curated set of CP/M 2.2 and 3 command line uilities that augment this hybrid CCP system.
-
------------------------------------------------------
-
 # A "New" Z80-Based Hybrid CCP (Console Command Processor) for CP/M+ (v3) - By RCL9
+
+<div style="text-align:center">
+<img src="/Images/hybrid_ccp.webp" alt="" style="width:50%; height:auto;">    
+</div>
 
 ## A High Level Overview
 

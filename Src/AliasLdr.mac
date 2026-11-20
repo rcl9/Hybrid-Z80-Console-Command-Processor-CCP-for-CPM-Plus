@@ -1,0 +1,682 @@
+; =======================================================================
+  title	'Alias Command Processor - Loader and parser of the alias.cmd file'
+; =======================================================================
+
+; Written by RCL9, November 2026
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+
+; This is the front-end processor which loads up the aliases.cmd text file, parses it
+; and then saves the data to a special chunk of memory allocated permanantly in the
+; AliasRSX.mac module. You can run this program at startup via the CPM3 profile.sub file.
+
+	.z80
+
+	cseg
+
+	INCLUDE	ALIASHDR	; The common definitions
+
+; ============================================================================================
+
+bdos	equ	5
+fcb	equ	5ch
+dma	equ	80h
+
+; For testing purposes, this allows the parsed table to be printed out
+INCL$PRINTOUT$CODE		equ	0
+
+; ============================================================================================
+; The Startup Code
+; ============================================================================================
+
+startup:
+        ld 	(old$stackptr), sp
+
+	; ld	sp, stack		;set up local stack, starting downward from 0100H
+	ld	sp, local$stack		; Provide a larger stack for deeper function calls
+
+	ld	a, (dma)	; Get the command tail length of any arguments on the command line
+	cp	0		; Did the user type anything?
+	jr	z, do$init	; No, initialize the RSX
+
+	; Go and ask the RSX to delete itself
+	ld	hl,(bdos+1)
+	call	Delete$RSX			;delete RSX just loaded
+
+	call	Print$String
+	db	'Aliases list removed (RSX module unloaded).',13,10,0
+
+	jp	exit
+	; rst	0
+
+	; Have the RSX module either initialize itself
+do$init:
+	ld	de,rsx$4d$init
+	ld	c,60
+	call	bdos
+	or	a
+;	ret	nz		; RSX was unloaded or does not exist
+ 	jp	nz, exit
+
+	; Query the Alias command list buffer address from our RSX module now that the module
+	; has been initialized by setting the RSX$Initialized flag.
+	ld	de,rsx$4e
+	ld	c,60
+	call	bdos			;get table load address
+	ld	(Alias$CMD$Buf$Ptr),hl
+	; ret	nz			; RSX module not installed
+	jp	nz, exit
+	ld	a, h
+	or	l
+	; ret	z
+	jp	z, exit
+
+	; Is the RSX$Initialized" set yet?
+	ld	hl,(bdos+1)		; Page aligned
+	ld	l,1bh			; point to init flag in RSX - RSX$Initialized
+	ld	a, (hl)
+	cp	0ffh   			; 0xff = Initialized
+	; ret	nz
+	jp	nz, exit
+
+; call	Print$String
+; db	'AA.',13,10,0
+
+	; Default the filename to "aliases"
+	ld	hl,default$file$name		;point to default name
+	ld	de,fcb+1
+	ld	c,8
+	call	move			;move it into place
+
+	; Start alias.cmd loading process
+
+	; Make sure that the filename has a valid extension. Add ".cmd" if none provided
+	ld	de,fcb+9
+	ld	a,(de)
+	ld	hl,cmd$string
+	ld	c,3
+	cp	' '			;is file type specified?
+	call	z,move			;if not, move DIR into place
+
+	; Open the Aliases.cmd text file
+	ld	de,fcb
+	ld	c,15
+	call	bdos			;open the file
+	inc	a
+	jp	nz, open$okay		;jump if open ok
+
+	ld	hl,(bdos+1)
+	call	Delete$RSX			;delete RSX just loaded
+	call	Print$String
+	db	'Alias command file not found ("aliases.cmd").',13,10,0
+
+	; rst	0
+	jp	exit
+
+open$okay:
+	; Set the "RSX$Initialized" flag in the RSX module to TRUE
+;	ld	hl,(bdos+1)		; Page aligned
+;	ld	l,1bh			; point to init flag in RSX - RSX$Initialized
+;	ld	(hl),0ffh		; set Alias command processor RSX as initialized
+
+	; Query the Alias command list buffer address from our RSX module now that the module
+	; has been initialized by setting the RSX$Initialized flag.
+	ld	de,rsx$4e
+	ld	c,60
+	call	bdos			;get table load address
+	ld	(Alias$CMD$Buf$Ptr),hl
+
+	; Read the command file into memory
+	ld	hl, Loaded$CMD$File
+	ld	(hl), 0			; Set loaded file contents to NULL
+	call	read$cmd$file
+
+;	Testing, print out the loaded file
+;	ld	hl, Loaded$CMD$File
+;	call	putstr
+
+	ld	hl, Loaded$CMD$File
+	ld	a, (hl)
+	or	a
+	jr	nz, rootparse		; Start parsing in case we loaded a valid file
+
+	call	Print$String
+	db	'No data loaded from the Alias command file',13,10,0
+	ld	hl,(bdos+1)
+	call	Delete$RSX
+
+	; rst	0
+	jp	exit
+
+rootparse:
+	ld	hl, (Alias$CMD$Buf$Ptr)	; The output alias command list buffer
+	ld	de, Loaded$CMD$File	; The loaded Aliases.cmd text file
+	call 	parse
+	jr	nc, parsing$okay	; If not out of memory during parsing then everything went okay
+
+	; We encountered an out of memory error (error printed) -- buffer overflow
+	; We'll keep whatever was loaded.
+
+parsing$okay:
+	call	Print$String
+	db	"'Aliases.cmd' loaded. Buffer size = ",0
+	ld	hl, Len$Alias$CMD$Table
+	call	prdec16
+	call	Print$String
+	db	' bytes. Remove via "off" option.',CR,LF,0
+
+	; Optionally print out the table and its names for testing purposes
+IF INCL$PRINTOUT$CODE
+	ld	hl,(Alias$CMD$Buf$Ptr)
+	ld	a, (hl)
+	or	a
+	jr	nz, ok
+
+ok:	call	listtbl
+	call	listnam
+ENDIF
+
+exit:	ld	sp, (old$stackptr)
+
+;	rst	0
+	ret
+
+; ============================================================================================
+
+; Read the command file into memory
+
+read$cmd$file:
+	; We'll load the entire file into memory after the end of this program
+	ld	de, Loaded$CMD$File
+
+	; Set the DMA memory address
+loop:	push	de
+	ld	c,26
+	call	bdos
+	pop	de
+
+        ; Read next 128-byte record
+	push	de
+	ld	de,fcb
+	ld	c,20
+	call	bdos
+	pop	de
+        or	a			; Check return code in A (00h = success, 01h = EOF)
+        jr	nz, read$done		; If A != 0, finished or error
+
+        ; Advance the DMA address by one record - 128 bytes
+	ex	de,hl
+        ld      de, 128
+        add     hl, de
+	ex	de,hl
+
+        jr      loop
+
+read$done:
+	; Add in the guard byte
+	ex	de,hl
+        ld      de, 128
+        add     hl, de
+	ld	(hl), EOF
+	ret
+
+; ============================================================================================
+
+; Remove the Alias command processor RSX module
+
+Delete$RSX:
+	; Make sure the name matches
+	ld	de, RSX$NAME
+	ld	l,10h		; Index into the RSX module name in the RSX header
+	ld	c,8
+	push	hl
+	call	comp
+	pop	hl
+	ret	nz
+
+	ld	l,0eh		; Set the remove flag in the RSX module's header
+	ld	(hl),0ffh
+
+; RCL9, this does not work in ZPM3 BDOS on Yaze.AG
+	; Call the CPM3 "Load Overlay" function
+	; DE points to the FCB of the file to be loaded
+	; ld	de,0	; Specify that we want to purge all flagged RSX modules
+	; ld	c,59
+
+	; Delete by asking the RSX module to self-delete itself.
+	ld	de,rsx$4f$del
+	ld	c,60
+	jp	bdos
+
+; Print out a text string
+
+Print$String:
+	pop	hl
+	ld	a,(hl)
+	inc	hl
+	push	hl
+	or	a
+	ret	z
+	ld	e,a
+	ld	c,2
+	call	bdos
+	jp	Print$String
+
+; Move memory from (HL) to (DE) of length (C)
+
+move:
+	ld	a,(hl)
+	ld	(de),a
+	inc	hl
+	inc	de
+	dec	c
+	jp	nz,move
+	ret
+
+; Compare (C) values from (DE) to (HL)
+
+comp:
+	ld	a,(de)
+	cp	(hl)
+	ret	nz
+	inc	de
+	inc	hl
+	dec	c
+	jp	nz,comp
+	ret
+
+; ============================================================================================
+; The Alias command file parser. DE = source loaded file. HL = destination mempry buffer.
+; ============================================================================================
+
+parse:	push	bc
+	push	de
+	ld	(recstart),hl	; "last known good end of table" starts as the table start
+	ld	(linestart),de	; The start of the input buffer
+	push	hl
+	ld	bc, Len$Alias$CMD$Table-1
+	add	hl,bc
+	ld	(limit),hl	; Table size for "Is the table full?" test
+	pop	hl
+	ld	bc,1		; Line # 1 counter
+	ld	(lineno),bc
+
+; Top of a line: skip white space and blank lines
+
+nextln:	ld	a,(de)		; Look at the next char
+	cp	blank		; Space?
+	jr	z,skipws	; 	yes - skip over it
+	cp	tab		; tab?
+	jr	z,skipws	; 	yes - skip over it
+	cp	cr		; CR?
+	jr	z,skipws	; 	yes - skip over it
+	cp	lf		; LF?
+	jr	nz,testch
+	inc	de		; Ignore LF
+	call	newln
+	jr	nextln
+skipws:	inc	de		; Ignore the blank line , tab or CR
+	jr	nextln
+
+; Decide what kind of line this is
+
+testch:	cp	semi		; A comment line?
+	jr	z,skpcmt
+	cp	quote		; Quoted text?
+	jp	nz,done
+	ld	(recstart),hl	; The current alias will start here in the table; remember it so
+				; 	we can throw the alias away again if memory runs out
+	ld	b,3		; We are going to read in 'key', 'command', 'arguments'
+
+; Read one field: first find its opening quote
+
+seek:	ld	a,(de)		; Grab the next char
+	inc	de
+	cp	quote		; Opening quote? Copy the text if so
+	jr	z,copy		;
+	or	a
+	jr	z,badrec	; NULL? Premature end of line
+	cp	eof
+	jr	z,badrec	; Ditto
+	cp	lf
+	jr	z,badrec	; Ditto
+	jr	seek		; Must be a comma or blank between fields so go and skip it
+
+; Copy the characters of the field up to the closing quote
+
+copy:	ld	a,(de)
+	inc	de
+	cp	quote		; Closing quote?
+	jr	z,endfld	; We're done
+	or	a
+	jr	z,badrec	; NULL = corrupted
+	cp	eof		; EOF?
+	jr	z,badrec
+	cp	cr		; CR? Line ends before we get the closing quote
+	jr	z,unterm
+	cp	lf		; LF? Same problem..
+	jr	z,unterm
+	ld	c,a		; Capture the char
+	ld	a,b		; B = which field # - 3 = first (the key)
+	cp	3		; First field?
+	ld	a,c
+	jr	nz,store	; This is not the key field so go store the character unchanged
+	cp	61h		; < 'a' ? Yes, go store it away
+	jr	c,store
+	cp	7bh		; > 'z' ? Yes, go store it away
+	jr	nc,store
+	sub	20h		; Convert lower to upper
+store:	ld	c,a
+	call	chklim		; Table full yet?
+	jr	z,nomem
+	ld	(hl),c		; Okay to add char to table
+	inc	hl
+	jr	copy
+
+unterm:	dec	de		; The field ended in EOF sp put the CRLF back so the
+				; line counter still sees it
+endfld:	call	chklim		; Space in buffer for NULL
+	jr	z,nomem
+	ld	(hl),0
+	inc	hl
+	djnz	seek		; We've now done one field
+	jr	nextln		; We've now done all 3 fields and an entire line
+
+; Comment line: skip to the end of the line
+
+skpcmt:	ld	a,(de)
+	inc	de
+	or	a
+	jr	z,done		; Null - done
+	cp	eof
+	jr	z,done		; EOF - done
+	cp	lf
+	jr	nz,skpcmt	; LF? No...
+	call	newln		; Count the new line & remember where it begins
+	jp	nextln
+
+; Finishing up
+
+badrec:	ld	hl,(recstart)	; We have an incomplete alias at the end of the text: discard it by
+				;       moving the write pointer back to where it began.
+done:	ld	(hl),0		; Pad end of table with NULL
+	or	a
+finish:	pop	de
+	pop	bc
+	ret			; HL = addr of the table's final NULL. Success.
+
+nomem:	ld	hl,(recstart)	; We are out of memory so cancel the current line parsing
+	ld	(hl),0
+	push	hl
+	call	oommsg		; "Out of memory at line # "
+	pop	hl
+	scf
+	jr	finish		; C = out of memory
+
+; Newln: a line feed has just been passed; de = start of next line
+
+newln:	push	hl
+	ld	hl,(lineno)	; Current line number
+	inc	hl		; Go to new line
+	ld	(lineno),hl
+	ld	(linestart),de	; This is where the new line begins (for the error message)
+	pop	hl
+	ret
+
+; Chklim: is the table full?  z set if hl equals the limit
+
+chklim:	ld	a,(limit)
+	cp	l
+	ret	nz
+	ld	a,(limit+1)
+	cp	h
+	ret
+
+; ============================================================================================
+
+; Print the out-of-memory error message:
+;   Out of memory at line # 20 in the aliases.txt file while parsing the text 'XYZ'
+;   where 20 is the line number and XYZ is the complete text of that line.
+
+oommsg:	push	hl
+	ld	hl,moom1	; "Out of memory at line # "
+	call	putstr
+	ld	hl,(lineno)
+	call	prdec16
+	ld	hl,moom2
+	call	putstr
+	ld	hl,(linestart)
+	call	putline
+	ld	hl,moom3
+	call	putstr
+	pop	hl
+	ret
+
+; Print HL as a decimal number (0-65535) without leading zeros.
+
+prdec16: push	af
+	push	bc
+	push	de
+	push	hl
+	ld	e,0		; E=0 means "no digit printed yet" (suppress leading zeros)
+	ld	bc,-10000	; 	Sub 10k repeatedly to get the ten-thousands digit
+	call	p16dig		; Print the digit (unless it is a leading zero)
+	ld	bc,-1000	; ... thousands digit
+	call	p16dig
+	ld	bc,-100		; ... hundreds digit
+	call	p16dig
+	ld	bc,-10		; ... tens digit
+	call	p16dig
+	ld	a,l		; What is left (0-9) is the units digit
+	add	a,'0'		; Turn it into the ascii digit
+	call	putch		; Always print the units digit (even if it is 0)
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ret
+
+p16dig:	ld	a,2fh		; '0' - 1
+p16l:	inc	a		; Count one more subtraction (a is the digit character)
+	add	hl,bc		; Subt the power of ten
+	jr	c,p16l
+	sbc	hl,bc		; We went too far so add the power of ten back
+	cp	'0'
+	jr	nz,p16p		; Print if not 0 digit
+	ld	d,a
+	ld	a,e
+	or	a		; E = 0 means nothing printed yet
+	ld	a,d		; Get the digit back
+	ret	z		; Return if a leading digit
+p16p:	ld	e,1		; From now on, zeros are real digits
+	jp	putch
+
+; Write the character in A to the console.  Keeps all registers.
+
+putch:	push	af
+	push	bc
+	push	de
+	push	hl
+	ld	e,a
+	ld	c,cwrite
+	call	bdos
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ret
+
+; Print the zero-ended text at hl.  afterwards hl points to the
+; byte after the zero, so several strings can be printed in a row.
+
+putstr:	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	call	putch
+	jr	putstr
+
+; Print the text at hl up to (not including) the end of the
+; line: a carriage return, line feed, control-z or zero byte.
+
+putline: ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	eof
+	ret	z
+	cp	cr
+	ret	z
+	cp	lf
+	ret	z
+	call	putch
+	jr	putline
+
+;-----------------------------------------------------------------------
+; Print the whole table, one alias per line, in the form KEY -> COMMAND ARGUMENTS
+;-----------------------------------------------------------------------
+
+IF INCL$PRINTOUT$CODE
+
+listtbl: push	af
+	push	hl
+	ld	hl,(Alias$CMD$Buf$Ptr)	; Start of the table
+
+ltb1:	ld	a,(hl)
+	or	a
+	jr	z,ltbend	; Null = done
+	call	putstr		; Print the key name
+	push	hl
+	ld	hl,arrow	; "-> "
+	call	putstr
+	pop	hl
+	call	putstr
+	ld	a,blank
+	call	putch
+	call	putstr		; Print the argument template
+	call	crlf2
+	jr	ltb1
+
+ltbend:	pop	hl
+	pop	af
+	ret
+ENDIF
+
+;-----------------------------------------------------------------------
+; Print every alias name on one line, separated by blanks and
+; ended with CR/LF. Lets the user see which aliases exist.
+;-----------------------------------------------------------------------
+
+IF INCL$PRINTOUT$CODE
+
+listnam: push	af
+	push	hl
+	ld	hl,(Alias$CMD$Buf$Ptr)	; start of the table
+
+lnm1:	ld	a,(hl)
+	or	a
+	jr	z,lnmend
+	call	putstr		; print the key name
+	call	skpstr		; step over the command text
+	call	skpstr		; step over the argument text (hl = next entry)
+	ld	a,(hl)
+	or	a
+	jr	z,lnmend
+	ld	a,blank
+	call	putch
+	jr	lnm1
+
+lnmend:	call	crlf2
+	pop	hl
+	pop	af
+	ret
+
+; Helper function to print cr/lf
+
+crlf2:	push	af
+	ld	a,cr
+	call	putch
+	ld	a,lf
+	call	putch
+	pop	af
+	ret
+
+; Move HL past the next zero byte, i.e. skip one stored string.
+
+skpstr:	ld	a,(hl)
+	inc	hl
+	or	a		; Was it the zero that ends the string?
+	jr	nz,skpstr	; No, keep going
+	ret			; Yes, HL is now at the start of the next string
+
+ENDIF
+
+; ============================================================================================
+
+	dseg
+
+stack	equ	100h
+
+old$stackptr:	dw	0
+
+; This is the name of the RSX module (as defined in the RSX header)
+RSX$NAME: db	'ALIASRSX'
+
+moom1:	db	'Out of memory at line # ',0
+moom2:	db	' in the aliases.cmd text file while parsing the text ',quote,0
+moom3:	db	quote,cr,lf,0
+
+ARROW:	db	' -> ',0	; Separator used by LISTTBL between key and command
+
+default$file$name:
+	db	'ALIASES '
+
+; RSXPB passed to the RSX module to initialize itself (or delete the RSX if it already exists)
+rsx$4d$init:	db	RSX$Initialize$Fn$Num
+	db	1	; Number of parameters words passed to the RSX
+	dw	0	; Return status from the RSX
+
+; RSXPB passed to the RSX module to obtain the Alias command buffer address
+rsx$4e:	db	RSX$GetBufferPtr$Fn$Num
+	db	0		; Number of parameters words passed to the RSX
+
+; RSXPB passed to the RSX module to self-delete itself
+rsx$4f$del:	db	RSX$Delete$Fn$Num
+	db	0		; Number of parameters words passed to the RSX
+
+; Default file extension to use for the Alias command file
+cmd$string:	db	'CMD     '
+
+; Address of the Alias command list buffer, stored in the Alias command processor RSX module
+Alias$CMD$Buf$Ptr:
+	ds	2
+
+; First address the parser may not write data to
+limit:	dw	0
+
+; Number of the text line currenqltly being parsed
+lineno:	dw	0
+
+; Address in the text where that line begins
+linestart: dw	0
+
+; Table address where the current alias began
+recstart: dw	0
+
+	ds	256
+local$stack	equ	$
+
+; RCL, we need to put the loaded cmd file in the code segment because gencom or ld80.com places
+; the data segment of this file /before/ the code segment.
+	cseg
+
+; Our file will be loaded into memory here...
+loaded$cmd$file:
+	ds	2
+
+end$code:	db	'END-CODE'
+
+end startup
+
+

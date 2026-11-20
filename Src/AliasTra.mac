@@ -1,0 +1,681 @@
+;=======================================================================
+; Alias Command Translator for the CPM3 command processor (CCP)
+;=======================================================================
+;
+; This code takes a raw CPM3 command line text buffer (as input from the
+; user) and does in-place replacement with the translatedg Alias command,
+; as defined in the file "aliases.cmd".
+;
+; Written by RCL9, November 2026
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+;
+;=======================================================================
+
+; This calls our loaded Alias command processor RSX module and queries it for the
+; loaded and pre-parsed Aliases.cmd text file.
+
+Init$Alias$Translator:
+	LD	HL, 00
+	LD	(TABPTR), HL
+
+; Testing
+;	push	hl
+;	ld	hl, tbl$loaded
+;	call	putstr
+;	pop	hl
+
+	; Go call our RSX module which holds the pre-parsed Aliases.cmd file
+	ld	de,rsx$4f	; RSX$GetBufferPtr$Fn$Num
+	ld	c,60
+	call	bdos
+	or	a
+	ret	nz	; Not loaded or not initialized yet
+
+	LD	(TABPTR), HL
+	ret
+
+; Print the whole table, one alias per line
+
+listtbl: push	af
+	push	hl
+
+	ld	hl, alias$list
+	call	putstr
+
+	ld	hl,(tabptr)	; Start of the table
+	ld	a, h
+	or	l
+	jr	z, notab
+
+	ld	a,(hl)
+	or	a
+	jr	nz, ltb1
+
+notab:	ld	hl, no$table
+	call	putstr
+	pop	hl
+	pop	af
+	ret
+
+ltb1:	ld	a,(hl)
+	or	a
+	jr	z,ltbend	; Null = done
+	call	putstr		; Print the key name
+	push	hl
+	ld	hl,arrow	; "-> "
+	call	putstr
+	pop	hl
+	call	putstr
+	ld	a,blank
+	call	putch
+	call	putstr		; Print the argument template
+	call	crlf2
+	jr	ltb1
+
+ltbend:	pop	hl
+	pop	af
+	ret
+
+; Print every alias name on one line, separated by blanks and
+; ended with CR/LF. Lets the user see which aliases exist.
+
+listnam: push	af
+	push	hl
+
+	ld	hl, alias$names
+	call	putstr
+
+	ld	hl,(tabptr)	; start of the table
+
+	ld	a, h
+	or	l
+	jr	z, notab2
+
+	ld	a,(hl)
+	or	a
+	jr	nz, lnm1
+
+notab2:	ld	hl, no$table
+	call	putstr
+	pop	hl
+	pop	af
+	ret
+
+lnm1:	ld	a,(hl)
+	or	a
+	jr	z,lnmend
+	call	putstr		; print the key name
+	call	skpstr		; step over the command text
+	call	skpstr		; step over the argument text (hl = next entry)
+	ld	a,(hl)
+	or	a
+	jr	z,lnmend
+	ld	a,blank
+	call	putch
+	jr	lnm1
+
+lnmend:	call	crlf2
+	pop	hl
+	pop	af
+	ret
+
+;=======================================================================
+; Front end Alias command translator
+;
+;   In : HL = address of the command line buffer.  It holds the raw text
+;        the user typed, ended by a zero byte.  The buffer is 80H (128)
+;        bytes long, so the text can be at most 127 characters.
+;
+;   Out: A = 0, CY clear : the command was an alias; the line in the
+;                          buffer has been replaced by the translated line.
+;        A = 1, CY set   : the command is not an alias; the buffer has not
+;                          been touched.
+;        A = 2, CY set   : it is an alias but the translated line would be
+;                          longer than 127 characters; the buffer has not
+;                          been touched.
+;        HL, DE and BC are preserved.
+;
+; Note: the new line is set up in a private buffer (WORKBUF) so that there
+; is no in-place data corruption.
+;=======================================================================
+
+trans:	push	bc
+	push	de
+	push	hl
+	ld	(lnptr),hl
+
+; Skip the blanks in front of the command
+
+ts1:	ld	a,(hl)
+	cp	blank
+	jr	z,ts2
+	cp	tab
+	jr	nz,ts3		; no - the command starts here
+ts2:	inc	hl		; step over the blank or tab
+	jr	ts1
+ts3:	ld	(pfxptr),hl	; remember where the command (and any prefix) starts
+
+; Look for a drive/user prefix such as  a:  a0:  0a:  15p:
+; and then records what has been seen: bit 0 = a drive letter, bit 1 = a user number
+
+	ld	b,0
+pfxlp:	ld	a,(hl)		; next character of the possible prefix
+	cp	colon
+	jr	z,pfxcol	; yes - go and check what came before it
+	call	upper
+	cp	'a'		; below the letter a?
+	jr	c,pfxnum	; yes - it may be a digit, go and see
+	cp	'q'		; above the letter p?
+	jr	nc,pfxbad	; yes - not a drive letter, so this is not a prefix
+	bit	0,b		; have we already seen a drive letter?
+	jr	nz,pfxbad	; yes - two drive letters is not a prefix
+	set	0,b		; note that we have seen the drive letter
+	inc	hl		; step over it
+	jr	pfxlp		; look at the next character
+pfxnum:	cp	'0'		; below the digit 0?
+	jr	c,pfxbad	; yes - not a digit, so this is not a prefix
+	cp	3ah		; above the digit 9?  (3ah is the character after 9)
+	jr	nc,pfxbad	; yes - not a digit, so this is not a prefix
+	bit	1,b		; have we already seen a user number?
+	jr	nz,pfxbad	; yes - two user numbers is not a prefix
+	set	1,b		; note that we have seen the user number
+	sub	'0'		; turn the digit character into its value
+	ld	c,a		; c = the user number so far
+	inc	hl		; step over the first digit
+	ld	a,(hl)		; is there a second digit?
+	cp	'0'		; below 0?
+	jr	c,pfxn1		; no second digit
+	cp	3ah		; above 9?
+	jr	nc,pfxn1	; no second digit
+	sub	'0'		; value of the second digit
+	ld	d,a		; keep it in d
+	ld	a,c		; the first digit's value ...
+	add	a,a		; ... times 2
+	ld	e,a		; keep that in e
+	add	a,a		; times 4
+	add	a,a		; times 8
+	add	a,e		; times 10
+	add	a,d		; plus the second digit = the two-digit number
+	ld	c,a		; c = the user number
+	inc	hl		; step over the second digit
+pfxn1:	ld	a,c		; the user number
+	cp	maxusr+1	; is it more than the highest user number?
+	jr	nc,pfxbad	; yes - not a valid prefix
+	jr	pfxlp		; look at the next character
+pfxcol:	ld	a,b		; we found a colon: did we see a drive and/or a user number?
+	or	a		; zero means nothing came before the colon
+	jr	z,pfxbad	; nothing - a colon on its own is not a prefix
+	inc	hl		; valid prefix: step over the colon
+	jr	pfxok		; the name starts after it
+pfxbad:	ld	hl,(pfxptr)	; not a prefix: the name starts where the command starts
+pfxok:	ld	(namptr),hl	; remember where the name starts
+
+; Measure the name (1 to 8 characters)
+
+	ld	b,0		; b counts the characters of the name
+nam1:	ld	a,(hl)		; next character
+	or	a		; end of the line?
+	jr	z,namend	; yes - the name ends here
+	cp	blank		; a space?
+	jr	z,namend	; yes - the name ends here
+	cp	tab		; a tab?
+	jr	z,namend	; yes - the name ends here
+	cp	'.'		; a period (start of the extension)?
+	jr	z,namend	; yes - the name ends here
+	inc	b		; one more character in the name
+	inc	hl		; step over it
+	jr	nam1		; look at the next character
+namend:	ld	a,b		; the length of the name
+	or	a		; zero characters?
+	jp	z,noalias	; no name at all - nothing to translate
+	cp	9		; more than 8 characters?
+	jp	nc,noalias	; too long to be a cp/m command name - not an alias
+	ld	(namlen),a	; remember the length
+
+; Look for an extension: a period and 0 to 3 characters
+
+	xor	a		; assume there is no extension ...
+	ld	(extlen),a	; ... so its length is 0
+	ld	a,(hl)		; the character that ended the name
+	cp	'.'		; was it a period?
+	jr	nz,extdon	; no - there is no extension
+	ld	(extptr),hl	; remember where the period is
+	inc	hl		; step over the period
+	ld	b,0		; b counts the extension characters
+ext1:	ld	a,(hl)		; next character
+	or	a		; end of the line?
+	jr	z,ext2		; yes - the extension ends here
+	cp	blank		; a space?
+	jr	z,ext2		; yes - the extension ends here
+	cp	tab		; a tab?
+	jr	z,ext2		; yes - the extension ends here
+	cp	'.'		; a second period?
+	jp	z,noalias	; yes - not a valid command name
+	inc	b		; one more extension character
+	inc	hl		; step over it
+	jr	ext1		; look at the next character
+ext2:	ld	a,b		; the number of extension characters
+	cp	4		; more than 3?
+	jp	nc,noalias	; yes - not a valid extension, so not an alias
+	inc	a		; count the period as well
+	ld	(extlen),a	; remember the length of period + extension
+
+ ; Find where the arguments start
+
+extdon:	call	skpbl		; skip the blanks that follow the command
+	ld	(argptr),hl	; HL = first character of the arguments (or the end of the line)
+
+; Look the name up in the alias table
+
+	ld	hl,(namptr)	; copy the name, in upper case, to a work area so that
+	ld	de,nambuf	; it ends with a zero byte like the table keys do
+	ld	a,(namlen)	; the number of characters in the name
+	ld	b,a		; used as the loop counter
+ncp:	ld	a,(hl)		; next character of the name
+	call	upper		; make it upper case
+	ld	(de),a		; store it in the work area
+	inc	hl		; next source character
+	inc	de		; next destination position
+	djnz	ncp		; repeat for every character of the name
+	xor	a		; a zero byte ...
+	ld	(de),a		; ... ends the copied name
+	ld	hl,nambuf	; HL = the name to look up
+	call	findal		; search the table
+	jp	c,noalias	; carry set = not in the table = not an alias
+	ld	(alcmd),hl	; remember the alias command (2nd field)
+	call	skpstr		; step over it ...
+	ld	(altpl),hl	; ... to the argument template (3rd field)
+
+; Build the translated line in workbuf
+
+	ld	hl,workbuf+maxln ; the first work-buffer address that may not hold a character
+	ld	(wlim),hl	; remember it for the "is it full?" test
+	ld	hl,(namptr)	; start of the name ...
+	ld	bc,(lnptr)	; ... minus the start of the line ...
+	or	a		; (clear carry for the subtraction)
+	sbc	hl,bc		; ... = how many characters come before the name
+	ld	b,h		; BC = that number of characters
+	ld	c,l
+	ld	hl,(lnptr)	; copy from the start of the user's line
+	ld	de,workbuf	; to the start of the work buffer
+	call	emitb		; copies the leading blanks and the prefix as typed
+	jp	c,toolng	; carry set = no room left = line too long
+	ld	hl,(alcmd)	; now the alias command text ...
+	call	emits		; ... is added
+	jp	c,toolng	; too long
+	ld	hl,(alcmd)	; does the alias command contain a period of its own?
+hasdot:	ld	a,(hl)		; next character of the alias command
+	or	a		; end of the alias command?
+	jr	z,nodot		; yes - no period found
+	cp	'.'		; a period?
+	jr	z,isdot		; yes - the alias has its own extension
+	inc	hl		; next character
+	jr	hasdot		; keep looking
+nodot:	ld	a,(extlen)	; the alias has no extension: did the user type one?
+	or	a		; length zero means no
+	jr	z,isdot		; no - nothing to carry over
+	ld	c,a		; BC = length of the typed period + extension
+	ld	b,0
+	ld	hl,(extptr)	; copy from the period the user typed
+	call	emitb		; add the typed extension to the translated command
+	jp	c,toolng	; too long
+isdot:	ld	a,blank		; one blank separates the command from its arguments
+	call	emit		; add it
+	jp	c,toolng	; too long
+	ld	(argmrk),de	; remember where the arguments will start
+	ld	hl,(altpl)	; HL = the argument template
+	call	expand		; add the translated arguments (%1 and %2 filled in)
+	jp	c,toolng	; too long
+	ld	hl,(argmrk)	; did the arguments add anything?
+	or	a		; (clear carry for the subtraction)
+	sbc	hl,de		; zero if the output pointer has not moved
+	jr	nz,term		; it moved - keep the blank
+	dec	de		; no arguments: take the blank back out
+term:	xor	a		; a zero byte ...
+	ld	(de),a		; ... ends the translated line
+	inc	de		; DE = one past the zero byte
+
+; Copy the finished line over the user's line
+
+	ld	hl,workbuf	; the start of the translated line
+	ex	de,hl		; HL = one past its end, DE = its start
+	or	a		; (clear carry for the subtraction)
+	sbc	hl,de		; HL = length of the line including its zero byte
+	ld	b,h		; BC = number of bytes to copy
+	ld	c,l
+	ld	hl,workbuf	; copy from the work buffer ...
+	ld	de,(lnptr)	; ... back into the user's buffer
+	ldir			; the copy (the two areas do not overlap)
+	xor	a		; a = 0 and carry clear = "line translated"
+	jr	tdone		; restore registers and return
+
+noalias:ld	a,1		; status 1 = not an alias
+	scf			; carry set = nothing was translated
+	jr	tdone		; restore registers and return
+toolng:	ld	a,2		; status 2 = translated line would be too long
+	scf			; carry set = nothing was translated
+tdone:	pop	hl		; restore the caller's registers (these do not
+	pop	de		; change a or the carry flag)
+	pop	bc
+	ret			; done
+
+; Look a command name up in the alias table.
+;   in : HL = the name, upper case, ended by a zero byte
+;   out: CY clear = found, HL = the alias command (2nd field of the entry)
+;        CY set = not in the table
+
+findal:	ld	(cmdptr),hl	; remember the name we are looking for
+	ld	hl,(tabptr)	; HL = start of the table
+tr1:	ld	a,(hl)		; first byte of this entry's key
+	or	a		; zero = end of the table
+	jr	z,fnone		; end reached without a match
+	push	hl		; remember where this entry starts
+	ld	de,(cmdptr)	; DE = the name we are looking for
+cmplp:	ld	a,(de)		; next character of the name
+	call	upper		; make it upper case (table keys are already upper case)
+	cp	(hl)		; same as the next character of the key?
+	jr	nz,mismat	; no - this is not the alias
+	inc	hl		; yes - advance in the key
+	inc	de		; and in the name
+	or	a		; was that matching pair the zero that ends both strings?
+	jr	nz,cmplp	; no - compare the next pair of characters
+	pop	de		; complete match: discard the saved entry start
+	ret			; HL is the command; carry is clear (or a cleared it)
+mismat:	pop	hl		; go back to the start of this entry
+	call	skpstr		; skip over the key
+	call	skpstr		; skip over the command
+	call	skpstr		; skip over the argument template (hl = next entry)
+	jr	tr1		; try the next entry
+fnone:	scf			; carry set = not found
+	ret			; done
+
+; Add the translated arguments to the work buffer. Reads the argument template at HL and writes
+; to the work buffer at DE,   replacing %1 and %2 (see the rules at the top of this file).
+; Out: CY clear = done, CY set = the work buffer is full.
+
+expand:	ld	a,(hl)		; next character of the template
+	inc	hl		; move on
+	or	a		; zero = end of the template
+	ret	z		; finished (carry is clear)
+	cp	pct		; is it a percent sign?
+	jr	nz,expcpy	; no - ordinary text, just copy it
+	ld	a,(hl)		; look at the character after the %
+	cp	'1'		; is it %1 ?
+	jr	z,sub1		; yes - insert the user's arguments
+	cp	'2'		; is it %2 ?
+	jr	z,sub2		; yes - insert the user's file spec and switches
+	ld	a,pct		; any other % is just a literal percent sign: copy it
+expcpy:	call	emit		; add the character to the output
+	ret	c		; output full - give up
+	jr	expand		; next template character
+
+; %1 : insert the user's arguments exactly as typed
+
+sub1:	inc	hl		; skip the '1' in the template
+	push	hl		; save our place in the template
+	ld	hl,(argptr)	; HL = the user's arguments
+	call	emits		; add them to the output
+	pop	hl		; back to our place in the template (flags unchanged)
+	ret	c		; output full - give up
+	jr	expand		; carry on with the template
+
+; %2 : insert the user's arguments, making sure a file spec exists
+
+sub2:	inc	hl		; skip the '2' in the template
+	push	hl		; save our place in the template
+	ld	hl,(argptr)	; HL = the user's arguments
+	ld	a,(hl)		; first character of the arguments
+	or	a		; zero means the user typed nothing
+	jr	z,s2def		; nothing typed - use the default "*.*"
+	cp	'/'		; does it start with a slash (a switch, not a file name)?
+	jr	nz,s2copy	; no - it is a file spec, copy the arguments as typed
+	push	hl		; switches only: save the position of the switches
+	ld	hl,defarg	; HL = the text "*.*"
+	call	emits		; add "*.*" to the output first
+	pop	hl		; HL = the switches again (flags unchanged)
+	jr	c,s2end		; output full - give up
+	ld	a,blank		; then a blank to separate it from the switches
+	call	emit		; add it
+	jr	c,s2end		; output full - give up
+	jr	s2copy		; and add the switches after the "*.* "
+s2def:	ld	hl,defarg	; nothing typed: HL = the text "*.*"
+s2copy:	call	emits		; add the chosen text to the output
+s2end:	pop	hl		; back to our place in the template (flags unchanged)
+	ret	c		; output full - give up
+	jr	expand		; carry on with the template
+
+;=======================================================================
+; Shared helper routines
+;=======================================================================
+
+; Write the character in A to the console.
+
+putch:	push	af
+	push	bc
+	push	de
+	push	hl
+	ld	e,a
+	ld	c,cwrite
+	call	bdos
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ret
+
+; Print the zero-ended text at HL. Afterwards HL points to the
+; byte after the zero, so several strings can be printed in a row.
+
+putstr:	ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	call	putch
+	jr	putstr
+
+; Print the text at HL up to (not including) the end of the line: a CR, LF, Ctrl-Z or zero byte.
+
+putline: ld	a,(hl)
+	inc	hl
+	or	a
+	ret	z
+	cp	eof
+	ret	z
+	cp	cr
+	ret	z
+	cp	lf
+	ret	z
+	call	putch
+	jr	putline
+
+; Helper function to print CR/LF
+
+crlf2:	push	af
+	ld	a,cr
+	call	putch
+	ld	a,lf
+	call	putch
+	pop	af
+	ret
+
+; Add the character in a to the work buffer at DE (used by TRANS).
+; Out: CY clear = stored, DE moved on; CY set = buffer full, nothing stored.
+
+emit:	push	af
+	call	chkout
+	jr	z,emfull
+	pop	af
+	ld	(de),a
+	inc	de
+	or	a
+	ret
+emfull:	pop	af
+	scf			; set the carry flag = "buffer full"
+	ret
+
+; Add the zero-ended text at HL to the work buffer at DE.
+
+emits:	ld	a,(hl)
+	or	a
+	ret	z
+	call	emit
+	ret	c		; buffer full - give up
+	inc	hl
+	jr	emits
+
+; Add BC characters starting at HL to the work buffer at DE.
+; Out: CY set = buffer full.
+
+emitb:	ld	a,b		; is the count zero?
+	or	c
+	ret	z
+emb1:	ld	a,(hl)
+	call	emit
+	ret	c		; buffer full - give up
+	inc	h
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,emb1
+	ret
+
+; Is the work buffer full? Z set if DE has reached WLIM.
+
+chkout:	ld	a,(wlim)
+	cp	e
+	ret	nz
+	ld	a,(wlim+1)
+	cp	d
+	ret
+
+; Move HL past the next zero byte, i.e. skip one stored string.
+
+skpstr:	ld	a,(hl)
+	inc	hl
+	or	a
+	jr	nz,skpstr
+	ret
+
+; Convert the letter in a to upper case (other characters unchanged)
+
+upper:	cp	61h
+	ret	c
+	cp	7bh
+	ret	nc
+	sub	20h
+	ret
+
+
+; Move HL forward over any blanks and tabs.
+
+skpbl:	ld	a,(hl)
+	cp	blank
+	jr	z,skpb1
+	cp	tab
+	ret	nz
+skpb1:	inc	hl
+	jr	skpbl
+
+; Print HL as a decimal number (0-65535) without leading zeros.
+
+prdec16: push	af
+	push	bc
+	push	de
+	push	hl
+	ld	e,0		; E=0 means "no digit printed yet" (suppress leading zeros)
+	ld	bc,-10000	; Subt 10k repeatedly to get the ten-thousands digit
+	call	p16dig		; Print that digit (unless it is a leading zero)
+	ld	bc,-1000	; ... thousands digit
+	call	p16dig
+	ld	bc,-100		; ... hundreds digit
+	call	p16dig
+	ld	bc,-10		; ... tens digit
+	call	p16dig
+	ld	a,l		; What is left (0-9) is the units digit
+	add	a,'0'		; Turn it into the ascii digit
+	call	putch		; Always print the units digit, even if it is 0
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+	ret
+
+p16dig:	ld	a,2fh		; '0' - 1
+p16l:	inc	a		; Count one more subtraction (a is the digit character)
+	add	hl,bc		; Subt the power of ten
+	jr	c,p16l		; Carry = it still fitted - count again
+	sbc	hl,bc		; We went too far: add the power of ten back
+	cp	'0'
+	jr	nz,p16p		; Print if not 0 digit
+	ld	d,a
+	ld	a,e
+	or	a		; E = 0 means nothing printed yet
+	ld	a,d		; Get the digit back
+	ret	z		; Return if a leading digit
+p16p:	ld	e,1		; From now on, zeros are real digits
+	jp	putch
+
+;==========================================================================================
+
+; RSXPB passed to the RSX module
+rsx$4f:	db	RSX$GetBufferPtr$Fn$Num
+	db	0		; Number of parameters words passed to the RSX
+
+no$table: db	'No Aliases command list has been loaded from Aliases.cmd',CR,LF,0
+
+; tbl$loaded: db	'AliasTra.mac: Alias RSX table pointer initialized.',CR,LF,0
+
+alias$list:	db	'Aliases currently loaded from the Aliases.cmd text file:',CR,LF,0
+alias$names:	db	'Alias names currently loaded from the Aliases.cmd text file:',CR,LF,0
+
+arrow:	db	' -> ',0
+
+; The default file spec substituted for %2
+defarg:	db	'*.*',0
+
+; Address of the parsed table
+tabptr:	dw	0
+
+; The name being looked up
+cmdptr:	dw	0
+
+; The user's command line buffer
+lnptr:	dw	0
+
+; Start of the command (prefix or name)
+pfxptr:	dw	0
+
+; Start of the command name
+namptr:	dw	0
+
+; Start of the user's arguments
+argptr:	dw	0
+
+; Tperiod of the typed extension
+extptr:	dw	0
+
+; The alias command (2nd field of the entry)
+alcmd:	dw	0
+
+; The alias argument template (3rd field)
+altpl:	dw	0
+
+; Whe translated arguments start
+argmrk:	dw	0
+
+; First work-buffer address that cannot be used
+wlim:	dw	0
+
+; Number of characters in the typed name
+namlen:	db	0
+
+; Length of the typed period + extension (0 = none)
+extlen:	db	0
+
+; The typed name in upper case + a zero
+nambuf:	ds	9
+
+; The translated line is placed hear temporarily during parsing
+workbuf: ds	128

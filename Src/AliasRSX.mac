@@ -1,0 +1,173 @@
+; =======================================================================
+  title	'RSX component of the Alias Command Processor'
+; =======================================================================
+
+; This is a fairly simple CPM3 RSX module that gets appended to the aliasldr.com program.
+; It primary purpose is simply to hold the parsed alias command table in memory and serve
+; it to anyone that needs it (ie. the modified CPM3 CCP command processor modules).
+
+; The parsing of the table is performed by the main AliasLdr.mac program which runs once
+; at start-up via the CPM3 "profile.sub" submit file.
+
+; Written by RCL9, November 2026
+;	(Rob's Retro Computing Archive)
+;	RetroComputingArchive@gmail.com
+;	https://github.com/rcl9
+
+	.z80
+
+	cseg
+
+	INCLUDE	ALIASHDR	; The common definitions
+
+; ---------------------------->>>>  CPM3 RSX header  <<<<--------------------------------------
+
+	; CPM Serial number (6 digits)
+	dw	0,0,0
+	; Start of RSX program
+	jp	Serve$CMD$Buffer$Address
+next$rsx:
+	; This is the next RSX in the queue
+	jp	0
+prev$rsx:
+	; Previous RSX in the queue
+	dw	0
+; This field controls whether the RSX is removed from memory by the next call to the
+; LOADER module via BDOS function 59. If the remove: flag is 0fFH, the LOADER removes the
+; RSX from memory. Note that the CCP always calls the LOADER module during a warm start
+; operation. An RSX that remains in memory past warm start because its remove: flag is zero,
+; must set the flag at its termination to ensure its removal from memory at the following warm start.
+; Offset = 0x0e
+remove$rsx:
+	db	0ffH
+; This field controls when the RSX is loaded. If the field is 0FFH, the LOADER only loads
+; the module into memory on non-banked CP/M 3 systems. Otherwise, the RSX is loaded into
+; memory under both banked and non-banked versions of CP/M 3.
+nonbank$rsx:
+	db	0
+	; GENCOM will replace this itself. Offset 0x10
+	db	'ALIASRSX'
+	; Loader flag
+	db	0
+	; Reserved
+	db	0,0
+
+; Whether this RSX is active and initialized (local variable). Oddly, this is accessed and
+; changed by the parent code in aliasldr.mac.
+; Offset 0x1B.
+RSX$Initialized:
+	db	0
+
+; ============================================================================================
+
+; CPM3 calls this code via BDOS function 60
+;	C = 3CH
+;	DE = RSX PB address
+
+; RSXPB:
+;	db FUNC ; RSX Function number (0 to 127 are available)
+;	db NUMPARMS ; Number of word Parameters
+; 	dw PARMETER1 ; Parameter I
+;	dw PARMETER2 ; Parameter 2
+;	...
+;	dw PARMETERN ; Parameter n
+
+Serve$CMD$Buffer$Address:
+	ld	hl, 0			; Return argument from the RSX
+
+	ld	a,c			; Get BDOS function number
+	cp	60			; Make sure that this is BDOS call # 60
+	jp	nz,  next$rsx
+
+	ld	a, (de)			; Get the RSX function number provided by the caller
+	cp	RSX$Initialize$Fn$Num	; Does caller want us to Initialize?
+	jr	nz, check2
+
+	; Initialize or unload our copy of the RSX...
+
+	ld	a,(RSX$Initialized)
+	or	a
+	jr	z, rsx$not$initialized
+
+	; We are already initialized so go and delete ourselves
+
+;	inc de				; Inc to our parameter #1 in the RSXPB struct
+;	inc de
+;	ld a, 0feh			; Signify to the caller that we are deleting ourselves
+;	ld (de), a			; Use the return argument #1 of the RSX RSXPB struct
+
+;	ld	a,0ffh
+;	ld	(remove$rsx),a		; Set remove flag
+;	ld	a, 0
+;	ld	(RSX$Initialized),a	; Reset init flag
+
+;	ld	de, rsx$deleted
+;	ld	c,9
+;	call	next$rsx		; CPM3 will delete this RSX module hereafter
+
+	ld	a, 0ffh			; Signify that we're now unloaded
+	ret				; The RSX will get deleted during the next warm boot
+
+rsx$not$initialized:
+;	inc de
+;	inc de
+;	ld a, 0fdh			; Signify that this RSX is a clone
+;	ld (de), a			; Use the return argument #1 of the RSX RSXPB struct
+
+;	ld	c, 60			; Restore the value
+;	push	de
+;	call	next$rsx		; Are there clone copies of us?
+;	pop	de
+;	or	a
+;	ret	z	 		; Yes, ignore and return
+
+;	ld a, 0fch			; Signify that we properly initialized ourselves
+;	ld (de), a			; Use the return argument #1 of the RSX RSXPB struct
+
+	ld	a, 0ffH
+	ld	(RSX$Initialized),a	; We can now set our local initialized flag
+	xor	a			; Inform the caller that there was no error
+	ld	(remove$rsx),a		; Reset remove flag
+	ret
+
+check2:	cp	RSX$GetBufferPtr$Fn$Num	; Does the caller want the Alias command buffer pointer into HL?
+	jr	nz, del$rsx
+
+	; Return the address to the alias command buffer
+	ld	hl, Alias$CMD$Table
+
+	xor	a			; No error, everything is going fine...
+	ret
+
+; The host wants us to self-delete ourselves
+
+del$rsx:
+	cp	RSX$Delete$Fn$Num 	; Does the host want us to self-delete?
+	jp	nz, next$rsx
+
+	ld	a, 0ffh
+	ld	(remove$rsx), a
+	ld	a, 0
+	ld	(RSX$Initialized), a
+
+	call	next$rsx
+
+	xor	a
+	ret
+
+; ============================================================================================
+
+; This is an arbritary sized table (2 128-byte pages) to hold the parsed alias command table
+
+Alias$CMD$Table:
+	; For testing purposes, one Alias
+	; db	'DF', 0, '3SHOW', 0, '%1', 0, 0
+
+	dw	0	; Initialize the table to empty
+	ds	Len$Alias$CMD$Table-2
+	db	0	; Guard byte for EOF
+	db	'GUARD'
+
+	end
+
+

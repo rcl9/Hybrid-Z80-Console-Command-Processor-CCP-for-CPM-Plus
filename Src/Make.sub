@@ -1,0 +1,68 @@
+; ----------------->>> Compile and link the RCL9's CPM3 CCP (command processor) - Using the Z80 port of the main CCP3 code
+
+RMAC LOADER3
+xref loader3
+; Create the PRL file from the REL file
+link loader3[OP]
+
+m80 =ccp3rcl9
+relhex ccp3rcl9
+
+; mac ccpdate
+
+; ccp3-rcl.com : sid.com ccpdate.hex ccp3.hex loader3.prl
+; M = Mov 0x200 to 0x500 to 0x100
+; D = Dump memory
+; F = Fill memory from 0x400 to 0x1000 with 0
+; E = Read file into 0x100
+; W = Write file
+;
+; Loader.prl initially sits betwen 0x200 and 0x4E6
+; Loading "ccp3-rcl.hex" will print out the top of memory for which you then add as the last argument to the "w" command
+; Note: make sure that the "100,1700" is large enough to capture and save out the new CCP program.
+SID LOADER3.PRL
+<M200,500,100
+<d380,400
+<f400,1700,0
+<eccp3rcl9.hex
+<wccp3rcl9.com,100,1700
+<g0
+
+; ----------------->>> Alias Command Processor Loader/Parser & RSX module
+
+; Use Microsoft M80 to generate .REL files
+m80 =aliasldr
+m80 =aliasrsx
+
+; Create the .com files. Do not use the /p:0100 argument in this RSX scenario nor "org 100" in the source files.
+l80 aliasldr,aliasldr/n/e
+
+; Use LINK.COM with [OP] to convert the REL files to a PRL
+link aliasrsx [op]
+
+; GENMOD generates a PRL from two .HEX files that were assembled 100H apart.
+copy aliasrsx.prl aliasrsx.rsx
+gencom aliasldr.com aliasrsx.rsx
+
+; ----------------->>> Alias Command Processor Loader/Parser & RSX module written by RCL9
+
+; Use Microsoft M80 to generate .REL files
+m80 =setdir
+m80 =dirrsx
+
+; Create the .com files. Do not use the /p:0100 argument in this RSX scenario nor "org 100" in the source files.
+l80 setdir,setdir/n/e
+
+; Use LINK.COM with [OP] to convert the REL files to a PRL
+link dirrsx [op]
+
+; GENMOD generates a PRL from two .HEX files that were assembled 100H apart.
+copy dirrsx.prl dirrsx.rsx
+gencom setdir.com dirrsx.rsx
+
+; --------------------------------------------
+
+a:w tmp2/ccp3rcl9.com b
+a:w tmp2/aliasldr.com b
+a:w tmp2/setdir.com b
+

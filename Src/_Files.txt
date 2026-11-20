@@ -1,0 +1,24 @@
+List of Associated Files
+=-=-=-=-=-=-=-=-=-=
+
+RCL9's Revised CPP for CP/M 3
+
+ccp3rcl9.mac	- Digital Research's original CCP for CP/M 3, ported to Z80 and augmented by RCL9
+loader3.asm	- DRI's loader program for the CCP
+aliastra.mac	- RCL9's Command Alias translator, called by the CPP with its command line
+make.sub		- The CPM3 submit file (for sub.com) to make the CCP, SetDIR.com and the RSX/AliasLdr.com 
+
+RCL9's New Command Alias Processor
+
+Aliases.cmd	RCL9's example Aliases text command file
+AliasHdr.mac	The shared (defines) header file
+AliasLdr.mac	The Command Alias text parser and RSX loader
+AliasRSX.mac	The Command Alias RSX module which holds and "servers" the Command Alias text buffer pointer.
+		This, and an implicit RSX memory loader, is concatenated to AliasLdr.com with the gencom.com program. 
+
+Some other files:
+
+relhex.com	A third part utility which converts Microsoft M-80 .REL files to .HEX files as needed by SID.COM in make.sub
+rsxdir.com	Installed RSX module lister (not always 100% correct)
+rsxmap.com	Installed RSX module map and memory usage lister
+root.dir		The named directory mapping file for the SetDIR.com RSX and the CCP's new named directory functionality
