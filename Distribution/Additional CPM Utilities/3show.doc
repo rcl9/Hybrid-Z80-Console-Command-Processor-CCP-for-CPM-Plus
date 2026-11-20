@@ -1,0 +1,47 @@
+3SHOW v3.1.1                                             John Elliott, 6-3-2001
+===============================================================================
+
+  3SHOW is a drop-in replacement for the CP/M Plus SHOW utility. It has the
+following features:
+
+* Program is 8k in size; original CP/M DIR is 9k.
+* All options from the original SHOW are valid.
+* Piping and redirection of output (via PIPEMGR) is supported. If this is
+ not required, you can remove the RSX with:
+
+   GENCOM 3DIR
+
+  which will reduce program size to 5k.
+
+New in 3SHOW 3.1.1
+==================
+
+* Options can be separated by commas or white space or both, eg:
+
+    3SHOW [SPACE USERS]
+
+Differences from CP/M 3 SHOW
+============================
+
+* Output redirection: You can use:
+
+    3SHOW {opts} >filename    Write to file
+    3SHOW {opts} >>filename   Append to existing file
+    3SHOW {opts} |program     Send output through a PIPEMGR filter
+
+    Filenames in the ">" and ">>" options can contain user numbers - eg:
+   10A:file.typ  or  B6:list.txt. These options also accept the device
+   names CON: LST: AUX: and NUL: 
+
+* Date output is fully Year 2000 compliant and uses a 4-digit year. 
+
+* In SHOW, the result of 
+
+   SHOW B:[USERS]
+
+  was different from 
+ 
+   SHOW B: [USERS]
+
+  In 3SHOW, these both behave like the first command. 
+

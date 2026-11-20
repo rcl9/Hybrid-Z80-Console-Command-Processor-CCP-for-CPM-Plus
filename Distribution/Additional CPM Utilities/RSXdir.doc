@@ -1,0 +1,37 @@
+                              RSXDIR.DOC
+                              ----------
+                     Documentation for RSXDIR.COM
+                         v1.0 - E.Meyer 1/85
+
+
+
+     RSXDIR is a simple program that will list the names of all the RSXs
+(Resident System Extensions) currently installed in a CP/M Plus (3.0) system. 
+It takes no arguments; simply type RSXDIR.
+
+     Example: on my Osborne Executive, I might find:
+
+              A>rsxdir
+              RSXDIR 1.0 - E.Meyer 1/85
+
+              BACKSP10
+              EXCLOCK
+              LOADER
+
+This informs me that I have two RSXs installed, my BACKSPAC RSX (which lets my
+Okidata printer backspace) and George Peace's EXCLOCK, which displays the
+clock on the screen.  The LOADER RSX is part of CP/M Plus, and remains present
+when other RSXs are.
+
+
+
+                      NOTE:  CP/M 2.2 EMULATION
+
+     RSXDIR is for CP/M Plus only; if it is run on an earlier version, it will
+display the message "Not a CP/M Plus System".  (It checks the version number
+with BDOS 12.)  This can be unfortunate if you have installed one of the RSXs
+which "mimics" CP/M 2.2 for compatibility purposes: RSXDIR may not work.
+     There is a simple patch.  Using SID or equivalent, change the byte at
+0126h in RSXDIR.COM from 30h to 00h.  Then RSXDIR will operate no matter what
+the version number appears to be.
+

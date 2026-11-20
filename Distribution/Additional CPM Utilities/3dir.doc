@@ -1,0 +1,149 @@
+3DIR v3.1.1                                              John Elliott, 6-3-2001
+===============================================================================
+
+  3DIR is a drop-in replacement for the CP/M Plus DIR utility. It has the
+following features:
+
+* Program is 12k in size; original CP/M DIR is 15k.
+* All options from the original DIR are valid; more options and display 
+ formats are supported.
+* Piping and redirection of output (via PIPEMGR) is supported. If this is
+ not required, you can remove the RSX with:
+
+   GENCOM 3DIR
+
+  which will reduce program size to 8k.
+
+New in this version:
+====================
+
+* Options can be separated by commas or white space, as in the original
+  DIR:
+
+    3DIR [DRIVE=B USER=4, EXCLUDE] *.SYM
+
+Differences from the original DIR
+=================================
+
+* Output redirection: You can use:
+
+    3DIR {command} >filename    Write to file
+    3DIR {command} >>filename   Append to existing file
+    3DIR {command} |program     Send output through a PIPEMGR filter
+
+    Filenames in the ">" and ">>" options can contain user numbers - eg:
+   10A:file.typ  or  B6:list.txt. These options also accept the device
+   names CON: LST: AUX: and NUL: 
+
+* Command-line filenames can contain user numbers. For example: 
+   3DIR C2:*.COM
+
+* Some of the statistics 3DIR brings up seem to be different (eg: used/max
+  directory entries). 3DIR's statistics agree with the original SHOW, not
+  the original DIR.
+
+* The "file attributes" column always shows all seven attributes  
+  R,S,A,1,2,3,4 rather than just "R/O", "Sys" and "Arcv"
+
+* File sizes are shown in bytes, not records. Bytewise file lengths are
+ supported.
+
+* Date output is fully Year 2000 compliant and uses a 4-digit year. 
+
+* Here are all the options 3DIR accepts. Options marked # are new in 3DIR;
+ options marked ! behave differently in 3DIR.
+
+  1       #Show only files that have the F1 attribute set
+  2       #Show only files that have the F2 attribute set
+  3       #Show only files that have the F3 attribute set
+  4       #Show only files that have the F4 attribute set
+  ARC      Show only files that have the Archive attribute set
+  ATT     !Show filename, size, and attributes
+            In DIR, this behaved like [FULL] but displayed all seven 
+            attributes rather than the normal three. 3DIR always displays
+            seven attributes.
+  BARE    #Show filenames in the format ud:filename.ext. This is intended for
+           use with PIPEMGR, to generate lists of files for further 
+           processing.
+  COLS    #Show filenames in columns, like the built-in DIR command
+  DATE    !Show filename and dates.
+            DIR treated this as a synonym for [FULL].
+  DESC    #Sort in descending order
+  DIR      Show only files that don't have the System attribute set
+  DOS     #Display like the DRDOS "DIR /L" listing
+  DOS2    #Display like the DRDOS "DIR /2" listing 
+  DRIVE=   List of drives to use; either DRIVE=x:  DRIVE=ALL  or 
+           DRIVE=(a,b,c)
+  EXCLUDE  Filenames on the command line will be taken as files _not_ to
+           list, rather than filenames to list
+  FF       Print a form feed character after a heading
+  FULL     Display filename, size, attributes, password mode and time stamps.
+  G        Gn is shorthand for USER=n
+  LENGTH= !Number of lines on a page. Every "length" lines, a heading will 
+           be printed. 
+             In DIR, this sets the length of the screen. In 3DIR, it is
+           intended for use when the output is not displayed but is being
+           passed through PIPEMGR.
+  LS      #Do a listing like Unix "ls -l" or DRDOS "xdir"
+  MESSAGE  Print a message when you're using USER= and DIR can't find any 
+           files in a user area.
+  NO PAGE  Don't pause every screenful.
+  NO SORT  Don't sort results.
+  ORDER=  #Sort order. This can be ORDER=NAME, ORDER=TYPE, ORDER=SIZE,
+           ORDER=CREATE, ORDER=UPDATE, or ORDER=ACCESS (the last three
+           referring to date stamps).
+  PAGE     Do pause every screenful
+  RO       List only read-only files
+  RW       List only read/write files
+  SIZE     List files and their sizes
+  SYS      List only System files
+  USER=    User areas to scan - either USER=n, USER=ALL or USER=(n,n,...)
+  X1      #Don't show files that have the F1 attribute set
+  X2      #Don't show files that have the F2 attribute set
+  X3      #Don't show files that have the F3 attribute set
+  X4      #Don't show files that have the F4 attribute set
+  XA      #Don't show files that have the Archive attribute set
+
+Customising
+===========
+  Thanks to the wonders of the GNU GPL, you should just be able to reassemble
+3DIR. However, setting up the build process is fiddly, so some default values
+can be changed without a rebuild.
+
+  The settings area is at 0280h in the COM file (if you have removed PIPEMGR,
+it will be at 0180h).
+
+  Settings+0: Options area address
+                If PIPEMGR has not been removed, you must at 0100h to this
+                address.
+  Settings+2: Column separator character for [COLS] and [SIZE] modes. Normally
+             a colon.
+  Settings+3: String to send to the printer (or other device) for a form feed.
+             Up to 7 bytes followed by a zero. For example, you could make
+             this your "clear screen" code and use 3DIR [FF] to clear the 
+             screen at the start of every page of output.
+
+The options area contains:
+              
+  Options+0: Sort order
+             'N'= by name
+             'T'= by type
+             'S'= by size
+             'C'= by create date
+             'U'= by update date
+             'A'= by access date
+  Options+1: Output format
+              0 = [FULL]
+              1 = [ATT]
+              2 = [SIZE]
+              3 = [DATE]
+              4 = [BARE]
+              5 = [COLS]
+              6 = [LS]
+              7 = [DOS]
+              8 = [DOS2]
+  Options+2: Sort direction.
+                0 = don't sort
+                1 = normal sort
+              0FFh= descending sort
+

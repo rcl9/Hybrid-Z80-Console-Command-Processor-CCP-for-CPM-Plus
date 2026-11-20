@@ -1,0 +1,32 @@
+L.COM v4.5, a Directory list program with user area and time & date support.
+
+RCL recompiled the program for the 64x30 Exidy Sorcerer, Nov 1 2026
+
+Show help: "L ::"
+
+Syntax: 
+        L [[d][u]:][afile] [options] - CP/M2
+        L  [[d][u]:][afile] [options] - CP/M3 (note double space)
+        d = drive; u = user; afile = ambiguous filename.
+
+Options: (may be multiple)
+
+A => Show All files ($DIR and $SYS)     S -> Show only SYSTEM files ($SYS)
+D => Show time and Date information     P => Send output to printer as well
+H => Sort across rather than down       T => Sort by fileType then filename
+I => Disable Inverse highlighting       / => Don't list files
+
+eg. "L : /*.COM" lists all except COM files in default user.
+
+eg. "L 31:*.MAC DP" lists MAC files in user 31 + date + to printer.
+
+Note - User number of "?" or "*" will list all users up to max user. (see docs)
+     - ":" delimits drive/user from f/name; " " delimits f/name from options.
+     - Option D shows CP/M3 creation date if present.
+     - First file starting with a "!" or "-" will be used as disk name (CP/M2).
+     - Directory label takes precedence over "!" or "-" (CP/M3).
+     - Attribute bits highlighted as follows:
+          12345678.RSA    R => Read Only, S => $SYS, A => Archive
+
+(c)1987 Richard Collett, with thanks to Ian Branch and Mike Thompson.
+

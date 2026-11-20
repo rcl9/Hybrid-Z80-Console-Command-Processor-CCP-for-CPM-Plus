@@ -1,0 +1,123 @@
+
+
+
+
+                                SETTING IT UP
+
+
+   Vanilla or Chocolate CP/M:
+
+   If  you  can edit 5 lines and then type "Z1 QL41", you should  take  the
+   extra  minute to configure the program for your terminal.   Simply  edit
+   the file QL41.AZM  and insert the byte sequences for clearscreen, dim  /
+   bright,  and  reverse / normal video where  indicated.   After  editing,
+   follow the simple assembly instructions below.
+
+   If you do not know or have all the video features mentioned, you  should
+   at least try to put in the clearscreen code.  The reverse video is  only
+   used to highlight strings found when using the "Find" command.  The  dim
+   /  bright  sequence is used in the filename  selection  screens  (binary
+   files  displayed  dim) and to display status  information  (to  visually
+   separate the status/command line from the file being viewed).
+
+                                    ......
+
+   ZCPR3x
+
+   No  configuration  is necessary;  the program will use  your  'standout'
+   video  for  both  of  the  sequences  described  above.   If  yours   is
+   dim/bright, you are in pretty good shape already.  Reverse video is much
+   less  appropriate and not likely to look that great.  For absolute  best
+   results  in either case, however, fill in the 'other' sequence  so  both
+   modes  are used.  See the notes in QL41.AZM for more detail on  how  the
+   'hardcoded' sequence will always take precedence.  Then follow the ZCPR3
+   assembly and linking instructions below.
+
+                                    ......
+   All Systems:
+   A  number of other things can be configured to your preference, but  all
+   are  non-essential.   Each and briefly described in comments  near  each
+   option.   All  user configurable options are all located  in  the  short
+   QL41.AZM file.
+
+
+                      HOW TO ASSEMBLE AFTER CONFIGURING
+
+   For  standard CP/M 2.2 or CP/M+, you can use the Z1 assembler  included,
+   even if you've never assembled a program before.  Just make sure  you've
+   got the QL41.AZM file you just edited, along with the rest of the  files
+   in this release, all on the same drive / user.  Then just type:
+
+   Z1 QL41
+
+    ...and  wait for your new customized QL41.COM to be created.  You  will
+   probably want to rename it just plain "QL.COM" for convenience.
+
+
+
+
+
+
+                              1
+
+
+
+   ------------------------------------------------------------------------
+
+   Advanced or alternative assembly and linking instructions:
+
+   If you prefer to use a different assembler or are creating a ZCPR3  ver-
+   sion, here are some helpful tips:
+
+                        ......................
+
+   For  regular  (non-ZCPR) assembly, if you prefer to use  either  M80  or
+   SLR's  Z80ASM,  you must first make sure that you have changed  the  M80
+   equate at the beginning of QL41.AZM from FALSE to TRUE.  Then:
+    ......
+
+   For M80:       ren QL41.MAC=QL41.AZM   (do not rename any other files)
+
+                  M80 =QL41/N/Z
+
+   then,w/ L80:   L80 /P:100,QL41,QL41/N,/E
+   or, w/ LINK:   LINK QL
+    ......
+
+   For Z80ASM:    ren QL41.Z80=QL41.AZM   (do not rename any other files)
+
+                  Z80ASM QL41             (that's it)
+
+                        ......................
+
+   For  ZCPR3, you must set ZCPR3 to TRUE in QL41.AZM.  You must  also  set
+   M80 to TRUE, since the Z1 assembler cannot be used.  You must have  cop-
+   ies of SYSLIB, Z3LIB, and VLIB to link to (not supplied).
+
+   For M80:       ren QL41.MAC=QL41.AZM   (do not rename any other files)
+
+                  M80 =QL41/N/Z
+
+   then, w/LINK   LINK QL,VLIB[s],Z3LIB[s],SYSLIB[s]
+
+    ......
+
+   For Z80ASM     ren QL41.Z80=QL41.AZM   (do not rename any other files)
+
+                  Z80ASM QL41/6
+   then,
+   w/SLRNK+    SLRNK+  QL41/n/a:100/j  QL41  VLIB/s Z3LIB/s SYSLIB/s  /e
+
+
+   (or use LINK as above)
+
+    ......
+
+   Other combinations of assemblers and linkers are left as an exercise..
+
+                                                    S. Greenberg
+                                                    rev.  26 Jan 1989
+
+
+                              2
+

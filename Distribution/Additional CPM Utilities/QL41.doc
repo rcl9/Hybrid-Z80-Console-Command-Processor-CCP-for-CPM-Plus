@@ -1,0 +1,367 @@
+
+
+
+
+                                 WHAT IS IT?
+
+   QL  is one of the the most flexible and powerful file viewing  utilities
+   available for CP/M; it is not just another "typer".  It combines some of
+   the best features of the popular CP/M, ZCPR3, and MS-DOS  utilities LUX,
+   LT,  VLU, and LIST  with its own  unique features including hex  display
+   mode and a unique, fast access, file reference by number system.   Other
+   features include:
+
+   o  Alphabetized  display  of all files in the current area;  "select  by
+      number" eliminates mistyped filenames.
+
+   o  LBR support also features "select by number" for member names.
+
+   o  Transparent decompression of squeezed and crunched files.
+
+   o  Memory based design allows instant backwards or random access viewing
+
+   o  Locate sections of interest quickly using string (or byte) search.
+
+   o  Hex  display  mode allows inspection of non-ascii  files,  or  closer
+      inspection of 'ascii-ish' files.
+
+   o  Optional extraction to disk of LBR member files, with decompression.
+
+   o  Full  wheel  byte and BYE support allows program to be  securely  run
+      online in an RCP/M environment.
+
+   o  Optional terminal attribute support greatly enhances display.
+
+   o  ZCPR3 version eliminates terminal and other hardware dependencies.
+
+   o  Instantly  configurable  /  customizable by anyone,  using  the  "Z1"
+      assembler (included), or your own favorite.
+
+   o  If not satisfied, get rid of QL and keep the assembler as a gift.
+
+
+                                QUICK USAGE
+
+   1. Just type QL.
+
+      A vertically oriented, alphabetized display off all filenames in  the
+      current drive/user will be displayed, with a number next to each one.
+
+   2. Pick  a  number of a file you'd like to view.  If  it's  squeezed  or
+      crunched, it will be taken care of.  If it's a library file...
+
+   [2b.]  ...you will be presented with a new screen with all  the  members
+      listed.   Again you get to pick a number.  (This is all  much  easier
+      than typing out the correct filename spelling).
+
+
+
+
+
+                              1
+
+
+
+   3. Now you get to view the file, one screen at a time.  You can go  for-
+      ward or backward a page at a time, forward line by line, or  directly
+      to  a specific 'page' (ie screen) instantly.  The latter can be  done
+      by  just  typing a 'page' number, or by using the "Find"  command  to
+      scan for specific text.
+
+   4. If  you  want,  type "?" for a new screen  summarizing  the  commands
+      available.  This screen also gives current settings of the  "toggles"
+      (which  may be changed) and a summary of the file- where it is,  it's
+      size in kilobytes and number of words and lines if appropriate.  Hit-
+      ting any key to returns you to viewing (right to the same spot).
+
+   5. Typing  ^X (or ESC or Q) will always escape you back to the  previous
+      level.  For example, if appropriate, hitting ESC while viewing a file
+      will bring you back to the LBR membernames display.  Another ESC will
+      bring  you back to the original list of all filenames.  A  third  one
+      gets you back to CP/M.  Note that ^C (or ^K) will instantly bring you
+      directly back to CP/M from any point.
+
+
+                                  LIMITATION
+
+   Due  to it's memory based design and its original intent to be a  'Quick
+   Look" utility, QL's main limitation is in the size of a file that can be
+   viewed  in it's entirety.  The program  will ACCEPT any size  file,  but
+   sections  of large files which are past the end of available memory  can
+   not be viewed.  See QL-OLD.DOC for more discussion on this.
+
+   Note that Extract Mode, described below, does NOT have this limitation.
+
+                                   NOTES
+
+   1. The  original invocation of QL may contain a filename  specification,
+      ambiguous  or otherwise.  Thus "QL *.DOC" will limit the "on  screen"
+      selection display to only those files with the ".DOC" extension.   If
+      the file is fully specified, or if only one file matches, the  select
+      by  number process will be skipped, for obvious reasons.  Note  that,
+      like a filesweep utility,  just plain "QL" is equivalent to "QL *.*".
+      This makes QL very fast and easy to use.
+
+   2. File Extraction (LBR files only).  At the "View a member:" prompt you
+      may enter "E", as indicated, which will put you in extract mode.  The
+      new prompt is "Extract a member:" and any members selected will auto-
+      matically  be extracted from the library to a disk file.   The  files
+      will be unsqueezed / uncrunched along the way, if appropriate.  Files
+      are written to the originally logged drive (indicated in the prompt),
+      even if the library resides on a different drive (eg if QL was  orig-
+      inally invoked
+
+      "A> QL B:*.*"
+
+      the  files will be written to the "A" drive.  The ZCPR  version  will
+      accept  a user number in the command line as well, and files will  be
+      written  to the originally logged drive and user.  QL will NOT  over-
+      write a pre-existing file without a prompt.
+
+
+                              2
+
+
+
+
+   3. If a library file is to be specified on the command line, you  should
+      NOT type the .LBR extension.  In this manner, QL will add the  exten-
+      sion and treat the file as a library, which is probably what you  ex-
+      pect.   If you DO fully specify the filename (no wildcards,  AND  the
+      extension  typed out), the file will be treated like a  miscellaneous
+      [binary] file.  The hex dump which will ensue will allow you to exam-
+      ine  the "guts" of the library's directory, if you are  so  inclined.
+      All other combinations (including anytime an LBR file is selected  by
+      number) will result in the file being opened as a library.          
+
+   4. Multi-file use:  This version adds the ability to view several files, 
+      or LBR members, in succession; it can also be used quite successfully 
+      to extract some or all of an LBRs members to disk.  "Multi" mode is 
+      activated from the file selection menu:
+      a. To select all the files (or members) in the list, simply press 
+         *.  QL will take off and open each one in turn.  Once the file 
+         is open, everything acts normally; you can page forward or 
+         backward, extract members, whatever.  When you decide you are 
+         finished with this file, simply hit ESC (or ^X); QL will pick 
+         the next one in the list.  You can, of course, abort at any 
+         time back to CP/M with a ^C, and when all have been processed, 
+         you will be returned the the file selection menu you started at.
+      b. To select just some of the files in the list, type a left 
+         parenthesis [(].  Then type file numbers from the list.  If you 
+         type an invalid number, it won't be accepted; you'll hear a 
+         beep and it'll be erased.  Type a comma [,] between each file 
+         number, and when you have listed all you want, type a right 
+         parenthesis [)] or just hit <CR>.  QL will then open each in 
+         sequence, as above.  
+
+   5. Sorting the file list:  Another new feature of this version.  You may 
+      re-sort the file list to another order if you so desire.  At the file 
+      selection menu, type S.  The prompt comes back, "Sort files beginning 
+      at:"  This is asking for the character position, in the filename, of 
+      the start of the key.  (The dot between the filename and extension is 
+      not included.)  The most useful numbers to respond with are probably 
+      8, to sort by extension, and 0, if you change your mind and want to 
+      sort by the entire name again after having sorted by extension.  
+      However, any number between 0 and 10 inclusive will work here, and 
+      may be useful with specialized filenames.  You may repeat the sorting 
+      process as many times as you want, intermixed with file viewing in 
+      any order.  A word of caution: the list of LBR members is read from 
+      disk AGAIN after each member is viewed or extracted.  Therefore, 
+      before using the multi-file options, sort beginning at 0!  Otherwise 
+      the file numbers will not be the same after the first member is 
+      processed, and you will miss members from your list, or possibly miss 
+      the first member if using *.
+
+   6. You can get a help screen describing how to maninpulate file numbers
+      by pressing ? or / at the file selection menu.
+
+
+
+
+
+
+                              3
+
+
+
+
+                            COMMAND INFORMATION
+
+   Following is a replica of a typical "help" screen, invoked by typing a
+   "?" while viewing a file.  More detail on some of the commands follows.
+    .....................................................................
+
+     --- While viewing ---           --- Toggle Commands ---
+
+   <cr>    Forward one page          A   Display ASCII / HEX:  ASCII
+   <sp>    Forward one line          T   Truncate long lines:    YES
+   <##>    Go to any page ##         C   Case sensitive find:     NO
+    B      Backward one page
+    F      Find text or hex byte
+    R      Repeat find
+    X      Exit viewing
+
+     File: B10:QL      .DOC
+     Size: 2419 bytes (3k)
+   Approx: 53 lines, 396 words.
+
+   Command, or <ret> to resume Viewing:
+
+    .....................................................................
+
+   Toggle commands:
+
+   Currently  there are three 'toggle' functions (though more may be  added
+   in a subsequent release).  They are "Display Mode" (ASCII/HEX),  "Trunc-
+   ation" (ON/OFF), and "Case sensitive find" (ON/OFF).
+
+   1. When  "Truncation"  is ON, lines longer than 80  characters  will  be
+      chopped off (a character in the last column identifies these  lines).
+      This  is the recommended mode of operation, as QL does not  currently
+      support left-right scrolling.  Furthermore, if the lines are  allowed
+      to wrap the 'pagination' will be not work correctly- lines may scroll
+      off your screen.  This area may be improved in a subsequent release.
+
+   2. The "Case sensitive" toggle only involves the 'Find' function.   When
+      "OFF", no distinction is made between upper and lower case; otherwise
+      the match must be exact.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                              4
+
+
+
+   3. "Display mode" is almost self explanatory; "ASCII" is the normal mode
+      for  viewing a text file.  The "HEX" mode display emulates a  typical
+      debugger  type  memory dump, with 16 hex bytes/line and  their  ascii
+      equivalents, if any,  on the right part of the screen.  QL will init-
+      ially  take an "educated guess" at the proper setting here  based  on
+      the content of the first few bytes, but it may be "faked out".  If  a
+      file comes up 'wrong', simply hit 'A' to alternate the display mode.
+
+   Note: If  the toggles are activated while the help screen is  displayed,
+         the  value  will be flipped and the screen  will  be  redisplayed,
+         showing the new values.  The commands may also be executed direct-
+         ly,  right in the middle of viewing a file.  In this event a  word
+         or  two indicating the new mode is displayed briefly, and  viewing
+         may proceed immediately.
+
+    ......
+
+   "While viewing" commands:
+
+   The  "While  viewing commands" shown in the left hand column  above  are
+   quite  self-explanatory.  Some "synonyms" (not shown) exist for some  of
+   the  commands, eg "Q", "X", "^X" or ESCape will all act  identically  as
+   "Exit".  A few extra details are supplied below.
+
+   1. Just  typing 1 or 2 digits causes QL to jump directly to that  "page"
+      (ie "screen") number.
+
+   2. The  "Find" command requires some clarification not indicated  above.
+      The  command results in the query "Find:", at which point  you  would
+      normally enter word(s) or a part of a word to scan for.  When  found,
+      the  corresponding page is displayed (with the occurrence(s)  of  the
+      string  higlighted if possible), and operation proceeds  from  there.
+      In HEX mode, it is possible to search for either ascii matches (right
+      hand  portion of display) or for a series of one or more  hex  bytes.
+      Using the latter mode requires that the hex bytes be preceded by  the
+      character "$".  If multiple bytes are being specified, do not use any
+      commas  or spaces between them.  For example,  to find the series  of
+      bytes 11H, 76H, 0ACH, you would respond to "Find:" by entering:
+
+      $1176AC
+    .....
+   Memory dump:
+
+   Not shown above is the memory dump option, which can be initiated by 
+   invoking the program with the command line:
+      QL CORE
+   (You must not have any file on the current DU: called "CORE" or 
+   "CORE.LBR" for this to work.  If by some chance you do, either rename 
+   it, or try something like QL B:CORE.)
+
+   This will display the current system memory.  In core dump mode, the 
+   addresses shown are the actual addresses.  When a file is displayed in 
+   HEX mode, the addresses are correct for a file loaded at 100H, as is 
+   normally the case.  Most commands are available during core dump, 
+   although some, notably switching to ascii, make little sense and would 
+   produce strange displays, and are therefore disabled.
+
+                              5
+
+
+
+
+                         INSTALLATION / CUSTOMIZATION
+
+   While  QL  will run right  'out of the box', it is worth the  extra  few
+   minutes  to  read the file QL-CFG.DOC.  Most people need only  read  the
+   first  paragraph  or two, and can then perform the "installation"  in  a
+   matter of minutes.
+
+
+                                 RCP/M USAGE
+
+   Simply  set  your  wheel address where indicated in  the  QL41.AZM  file
+   (ZCPR3 users need not bother) , and QL will instantly become a very  vi-
+   able online utility.  This gives users new flexibilities: to examine HEX
+   files online; to go backwards when one types 'too far'; and to save time
+   by  using the FIND command to skip right to a section of interest  in  a
+   textfile.  Plus no more annoying typographical errors of filenames.
+
+   QL will sense the presence of BYE, and not send video specific sequences
+   to remote terminals.  The wheel byte is used to provide security by  not
+   allowing  hex  displays of files with .COM extension or a  dump  of  the
+   system's memory.  Files with the SYS attribute are ignored as well.  Ob-
+   viously the LBR file extract mode is deactivated.  Any 'menu' references
+   to  deactivated  functions are eliminated from display.  Note  that  the
+   WHEEL and BYE checks are independent- SYSOPS may remotely examine system
+   memory, etc.
+
+
+                                                     - Steven Greenberg
+                                                       14  August  1988
+                                       QL41 additions- Ross Presser
+                                                       26 January  1989
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                              6
+

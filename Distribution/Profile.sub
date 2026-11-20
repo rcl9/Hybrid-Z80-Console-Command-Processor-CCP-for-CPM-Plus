@@ -1,0 +1,13 @@
+; New CCP cmds: LstAlias, AliasNam, cls, DirNames, ListEsc
+; z3Plus small
+setdef *,A:,B: [order=(COM,SUB),temporary=A:]
+; Alias listings cmds: ALI, Aliases, LstAlias, AliasNam
+AliasLdr.com
+; Load the named directories from file ROOT.DIR
+Setdir.com
+dirnames
+; Hist30.com uses 2816 bytes vs. 2048 bytes for Hist.com
+; Hist or Hist30 must come last or else command line corruption
+; Hist30.com
+hist.com
+

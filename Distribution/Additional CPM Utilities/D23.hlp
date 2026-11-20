@@ -1,0 +1,320 @@
+;
+                                     D 
+                                Version 2.3
+
+                               Gene Pizzetta
+                             December 27, 1992
+
+     A Z-System directory program with lower-case display, numerous command 
+     line options for displaying various types of files, and features for 
+     working with other ZCPR3 programs.  Also runs under vanilla CP/M.
+
+
+             I  Introduction               D  Display features
+             U  Usage                      E  Errors
+             S  Option summary             C  Configuration
+             X  Usage examples             N  Special Notes
+             O  Option details             H  History, Copyright
+                               B  Bug Reports
+:I
+
+                               INTRODUCTION 
+
+D has long been a favorite directory program.  It provides a number of 
+features not provided by other directory utilities.  The display is in 
+lower-case, which makes it more readable to most people.  In addition, it 
+shows total disk capacity, the total number of bytes used by the displayed 
+files, the number of bytes remaining on the disk, and the number of 
+remaining directory entries.  It also shows SYS, ARC, R/O, and other file 
+attributes, and displays files from all user areas in a single listing.
+
+D is re-entrant and may be used with the GO command.
+
+D sets the program error flag if no files are found that match the file 
+mask or the selected options.  It will also store the number of matching 
+files in a ZCPR register, if you so desire.  And D will operate quietly, if 
+you wish, with no screen display.
+
+Originally written for CP/M 2.2 and above, it is designed to give most of 
+the information a user requires, while remaining under 4K in size.  This 
+version of D also takes advantage of the features available under ZCPR3 and 
+Z3PLUS.
+
+
+INTRODUCTION (continued)
+
+Give D a little time and the value of the various features will become 
+obvious.
+:U
+
+                                   USAGE 
+
+
+
+          D {dir:}{{afn}.aft} {{/}options}
+
+If a drive and user or named directory is omitted, the current drive and 
+user is assumed.  If a filename is omitted then all files (*.*) is assumed. 
+If a filetype is given without a filename, D wildcards the filename 
+(*.typ).  If no option is given then all non-system files are displayed.  
+Under CP/M, D works only in the current user area; any user given in the 
+filespec is ignored.
+
+A filename mask may include slashes, but if it begins with a slash, the 
+mask must be preceded by a DIR or DU specification, or simply a colon; 
+otherwise D will think it has an option list.
+:S
+
+                              OPTION SUMMARY 
+
+Option lists must be preceded by a slash (/), unless a directory spec or 
+file spec is given.  The option list should not include intervening spaces. 
+Two successive slashes causes display of a brief usage message.
+     A    archived files only
+     B    include both non-system and system files
+     C    comprehensive, complete file control block information
+     F    suppress file sizes (shows more files on screen)
+     L    send to printer
+     M    put number of matching files in registers 18 and 19.
+     O    read-only files only
+     P    no screen paging, no formfeeds to printer
+     Q    quiet operation with no display
+     R    reset disk system
+     S    only system files
+     U    include files from all user areas
+     W    only read/write files
+     X    do not sort
+     Y    display summary only
+     Z    only non-archived files
+:X
+
+                              USAGE EXAMPLES 
+
+     A0>d b: /a          displays all archived files for the current user 
+                         area (0) on drive B.
+
+     A0>d e4:            displays all non-system files on drive E, user 4.
+
+     A0>d /so            displays all the read-only system files from the 
+                         current user area and drive (A0).
+
+     M0>d edit:foo.*     displays all non-system files named FOO from the 
+                         named directory EDIT.
+
+     A0>d c23:.bar b     displays all files, both system and non-system, 
+                         from user 23 on drive C with a filetype of .BAR.
+
+     B1>d :/*.* u        displays all filenames beginning with a slash in 
+                         all user areas of drive B (the default drive).
+:O
+
+                     DETAILED EXPLANATIONS OF OPTIONS 
+
+Some options, particularly those that regulate the display, are mutually 
+exclusive.  If two or more such options are given in the command line, 
+generally the more comprehensive options take precedence.  Unknown options 
+cause no error; they are ignored.
+
+     A    Archived files only.  This filters for files with the archive bit 
+          set and only those files are displayed.  (The archive attribute 
+          is a CP/M Plus feature that has also been implemented by ZRDOS, 
+          ZSDOS, and other 2.2 replacements).  See also Z option.
+
+     B    Both system and non-system files included.  This option turns off 
+          the system file filter and displays all files on the disk, both 
+          system and non-system.  System files are highlighted.  This 
+          option can be configured as the default.  In that case, B will 
+          exclude system files.  See also S option.
+
+OPTION DETAILS (continued)
+
+     C    Comprehensive file information.  Displays the complete directory 
+          entries for the selected files.  The files are unsorted but the 
+          filters work normally (the default is all non-system files).  All 
+          file attributes, including F1 through F8, are shown using 
+          highlighting on the corresponding characters of the filename.
+
+     F    File sizes suppressed.  Displays files without file size 
+          information, resulting in a more compact display, with one 
+          additional column of filenames.
+
+     L    LST (printer) echo.  Sends the directory to the printer, as well 
+          as to the screen (but there is no screen page pause).  Printer 
+          output works even in quiet mode (see option Q).  Normally the 
+          printer listing is paged (every 4 lines less than your page 
+          length), and a final formfeed is sent when the listing is 
+          completed, but see also P option.  In earlier versions, this was 
+          the P option.
+
+OPTION DETAILS (continued)
+
+     M    Put number of matching files in user registers.  As distributed D 
+          uses registers 18 and 19, with the low byte in 18.  Some programs 
+          don't work if they have to deal with more than 255 files.  You 
+          can detect this by checking for a non-zero value in register 19.  
+          The registers used can be changed with ZCNFG.  In addition, this 
+          option can be configured as the default, in which case M will 
+          turn the option off.
+
+     O    Read-only files only.  This filters for files that have the RO 
+          attribute set.  Only those files are displayed.  See also W 
+          option.
+
+     P    No paging, no formfeeds.  This option turns off screen paging.  
+          If the L option is specified, this option also causes printer 
+          formfeeds to be suppressed.  (Screen paging is always turned off 
+          if the L option is given.) This option can be configured as the 
+          default, in which case P will turn paging back on.
+
+OPTION DETAILS (continued)
+
+     Q    Quiet operation.  Suppresses the screen display, useful if you 
+          are using D for simple file detection with the error flag, or if 
+          you are using the M option, in a SUBMIT or ZEX batch file.
+
+     R    Reset disk system.  The disk system is reset before the directory 
+          is read, so that the correct disk space is given under CP/M 2.2 
+          compatible systems if the disk is changed.  This option should 
+          not be necessary under CP/M Plus or ZSDOS, but it never hurts.
+
+     S    System files only.  This filters out non-system files and 
+          displays only system files.  See also B option.
+
+     U    All users included.  Displays files from all user areas of a disk 
+          in a single listing.  This is the only way to get access to other 
+          user areas under vanilla CP/M.
+
+     W    Read/write files only.  This option displays only files that are 
+          not read-only.  See also R option.
+
+OPTION DETAILS (continued)
+
+     X    Cancel sort.  The directory files is not sorted in the display.  
+          This is handy to find out the order that the filenames appear in 
+          the directory.  Some files with multiple directory entries that 
+          are not sequential will be listed more than once.
+
+     Y    Summary only.  With this option only the two summary lines are 
+          displayed, giving the number of matching files, the number of 
+          kilobytes of disk space those files uses, the number of free 
+          directory entries, and the amount of free disk space remaining.
+
+     Z    Non-archived files only.  This filters for files that do not have 
+          the archive bit set and allows you to determine how many files 
+          need to be backed up.  See also A option.
+:D
+
+                             DISPLAY FEATURES 
+
+The directory display is fairly obvious, but a few items might need 
+clarification.
+
+The default file filter excludes system files.
+
+Sorting the file entries alphabetically by filename is also a default.  
+Files, sorted or unsorted, are displayed in a columnar format.
+
+System files are displayed in alternate video (dim or reverse), when the B 
+or S option is used, if alternate video is supported by your TCAP.  If 
+alternate video is not available, as under vanilla CP/M, system files 
+cannot be identified.
+
+Following the file size is either a "k" (for kilobytes) or an "r" (for a 
+read-only file).  The size is always in kilobytes, regardless of the 
+letter.  If the letters are upper-case ("K" or "R") then the corresponding 
+file has the archive bit set.
+
+DISPLAY FEATURES (continued)
+
+The characters in the filename display are reverse-cased.  Most filenames 
+will be displayed in lower-case, but a filename in lower-case on disk (it's 
+easy to do with MBASIC) is displayed in upper-case.
+
+If a directory entry has a non-printable character in it, the character is 
+replaced by a question mark (?).  That can be useful because it doesn't 
+mess up your display and you know it's there.
+
+If the C option is used, any space characters with an attribute bit set are 
+replaced with an asterisk (*), so the attribute can be displayed using dim 
+video.
+
+The number of columns used for the display varies, depending on the number 
+of files, the options chosen, and the width of your screen.  Under Z-System 
+the screen width will adjusted according to your current environment.  
+Under CP/M, 80 columns is always assumed.
+:E
+
+                                  ERRORS 
+
+If no files are found that match the given options or ambiguous filename, D 
+will set the program error flag.  That will allow to detect the existence 
+of particular types of files and act on their absence or presence using the 
+IF ERROR command.  Other errors also set the error flag, but the values are 
+different:
+      2 = invalid directory
+     10 = no matching files found
+     12 = TPA overflow (which shouldn't happen)
+:C
+
+                               CONFIGURATION 
+
+No installation is required, except for vanilla CP/M operation.  Under 
+CP/M, the number of screen lines defaults to 24 and the number of printer 
+lines defaults to 66, so those parameters will have to be changed using 
+ZCNFG if your screen or printer differs.  For Z-System users those values 
+are taken from the environment descriptor.
+
+Z-System users with reverse video highlighting should use ZCNFG to change 
+the reverse video configuration parameter to "Yes".  The display will look 
+much better if you do.
+
+Several other configuration options are available:  display of CP/M Plus 
+disk labels instead of named directories, selection of the registers in 
+which D saves the matching file count, and the default for command line 
+options B, M, and P.
+
+Configuration is accomplished using ZCNFG and the accompanying Dxx.CFG 
+file.  See the ZCNFG help screens for configuration details.
+:N
+
+                               SPECIAL NOTES 
+
+Be cautious when the disk in question is read-only.  Incredibly spurious 
+results can occur, especially under CP/M 3.0.  For that reason D will 
+display a "Disk is Read Only" message, so you can treat the results with a 
+grain of salt.  You can also use the R option (reset disk system) to 
+eliminate the problem.
+
+CP/M 3.0 supports disk labels, which are a directory entry under user 32.  
+D can be configured to look for a user 32 entry and, if it finds one, list 
+it as the disk name just after the user/drive callout.  User 32 is not 
+available under any other circumstances.  This feature is probably more 
+useful for users of floppy drive-based systems under CP/M Plus than would 
+be named directories.  If users of CP/M 2.2 desire such labels on their 
+disks, they must find a way to install a directory label entry in user 32.  
+Any disk utility, such as DU, could be used to do this by modifying a null 
+(0K) directory entry to user 32.  Only experienced users should try this.  
+Normally D displays ZCPR3 named directories instead of disk labels.
+:H
+
+                           HISTORY AND COPYRIGHT 
+
+HISTORY:  For version history see the accompanying history file.
+
+COPYRIGHT:  The original version of D.COM is copyright (c) 1984 by Hank 
+Blake, Source Maverick, San Diego, California.
+:B
+
+                        BUG REPORTS AND SUGGESTIONS 
+
+Please report any bugs as soon as possible, and make suggestions at your 
+leisure:
+
+                  Gene Pizzetta
+                  481 Revere St.
+                  Revere, MA 02151
+
+                  Voice:  (617) 284-0891
+                  Newton Centre Z-Node:  (617) 965-7259
+                  Ladera Z-Node Central:  (310) 670-9465
+

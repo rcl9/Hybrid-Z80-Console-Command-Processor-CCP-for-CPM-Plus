@@ -1,0 +1,255 @@
+
+                             RENAME
+                           Version 3.7
+
+                          Gene Pizzetta
+                        November 17, 1990
+
+
+RENAME, originally written by Richard Conn, renames files from 
+the command line or interactively, using ambiguous filenames and 
+CP/M-style or MS-DOS-style syntax.  Options allow prompting 
+before each file is renamed, renaming of system files, and 
+erasure of existing files without prompting.
+
+USAGE:
+
+  Old style (newname=oldname):
+     RENAME {dir:}afn.aft=afn.aft{,...} {{/}options}
+
+  New style (oldname newname):
+     RENAME {dir:}afn.aft afn.aft{,...} {{/}options}
+
+  Interactive control mode (oldname):
+     RENAME {dir:}afn.aft{,...} {{/}options}
+
+  Mixed form:
+     RENAME {dir:}afn2=afn1,{dir:}afn3 afn4{,...} {{/}options}
+
+The first form shows elements of the older CP/M style 
+(dir:newname=oldname).  The second form shows elements of the 
+newer MS-DOS style (dir:oldname newname).  The third form adds 
+the single-filespec (dir:oldname), which automatically invokes 
+Control mode allowing the user to rename files individually.  The 
+forth form shows that specification types can be intermixed 
+within a command line.  If no DIR or DU specification is given, 
+the current drive/user is assumed.  Multiple file list elements 
+must be separated by commas without intervening spaces.
+
+OPTIONS:  A leading slash is optional.
+
+     I    Inspect mode.  Each matching filename is displayed and
+          the user is prompted.  A response of "Y" will cause the 
+          file to be renamed.  Entering "Q" or ^C will exit the 
+          program.  Any other response will skip the file and 
+          then prompt for the next matching filename.
+
+     E    Erase existing files without prompting.  If RENAME
+          finds that the renamed file will have the same name as 
+          an existing file, it prompts "Exists, Erase?".  A 
+          response of "Y" will cause the existing file to be 
+          erased.  Entering "Q" or ^C will exit the program.  Any 
+          other response will skip the file.  Using this option 
+          will cause such files to be erased without prompting.
+
+     R    Erase even an existing read-only file with the same
+          name without prompting.  If RENAME finds an existing 
+          file with the same name as the new filename, it prompts 
+          "R/O, Erase?", even if the "Exists, erase?" has already 
+          been answered "Y", and even if the E option has been 
+          used on the command line.  A response of "Y" will cause 
+          the read-only file to be erased.  Entering "Q" or ^C 
+          will exit the program.  Any other response will skip 
+          the file.  Using this option will cause such files to 
+          be erased without prompting.  This option has priority 
+          over the E option, so the E option is unnecessary if 
+          the R option is used.
+
+     S    Toggle inclusion of system files.  Whether RENAME
+          recognizes system files by default is determined by a 
+          configuration byte that can be changed using ZCNFG.  As 
+          distributed, system files are ignored, unless the S 
+          option is given on the command line.  Whatever the 
+          configured default, it is reversed by this option.
+
+     Q    Toggle current default quiet mode.  RENAME defaults to
+          the ZCPR3 quiet flag, if it is on.  Otherwise, RENAME 
+          defaults to a configuration byte that can be changed 
+          using ZCNFG.  As distributed, the default is verbose 
+          mode.  Whatever the configured default, it is reversed 
+          by this option.
+
+If only one, possibly ambiguous, filename is given, RENAME will 
+enter Control mode.  Each matching filename will be displayed 
+individually and the user will be asked to specify the new name 
+for that file.  Pressing only a carriage return will skip 
+renaming of the currently displayed file.  Entering ^C will abort 
+the program.
+
+If the ZCPR3 quiet flag is set, all screen output is suppressed, 
+except error messages and required prompts.  For instance, if the 
+E or R options are not given and RENAME finds an existing file 
+with the same name, the user is prompted for permission to erase 
+the file even if the quiet flag is on.  Inspect and Control modes 
+prompt normally at all times.
+
+ZEX input is turned off while RENAME is running.
+
+On exit the program error flag is set to 10 (source file not 
+found) if no files are renamed, unless the program is aborted at 
+a prompt with "Q" or ^C.  In addition, the number of files 
+renamed is entered into ZCPR3 register 0 (up to a maximum of 
+255).  An invalid option causes the program error flag to be set 
+to 19, and an invalid directory specification causes the flag to 
+be set to 2.  The latter two errors invoke the error handler.
+
+EXAMPLES:
+
+     rename *.asm *.mac
+          Renames all ASM files to MAC.
+
+     rename *.mac
+          Renames all MAC files to names input by the user.
+
+     rename *.obj=*.com si
+          Renames all COM files to OBJ, including system files, 
+          allowing the user to approve each change before it is 
+          made.
+
+     rename *.z80 *.mac,*.asm,*.doc=*.txt e
+          Renames all Z80 files to MAC, enters control mode 
+          prompting for a new name for each ASM file, and then 
+          renames all TXT files to DOC.  Existing files with the 
+          same name as a renamed file are erased without 
+          prompting.
+
+FILE ATTRIBUTES:  The speed of RENAME has been significantly 
+increased under ZSDOS and Z3PLUS by ignoring file attributes on 
+read-write files.  Both ZSDOS and CP/M-Plus preserve file 
+attributes automatically, with the exceptions noted below.
+
+If the file is read-only, or if RENAME is running under another 
+DOS, the attributes of the old filename will be transferred to 
+the new filename, except for the PUBLIC attribute (F2), which 
+could cause serious problems if it were maintained.  In addition, 
+under CP/M-Plus the WHEEL (F8) attribute is used to indicate that 
+a file was loaded from user 0 as a public file, so it is 
+automatically reset by the DOS.
+
+READ-ONLY CAUTION:  RENAME renames read/only files without 
+warning.  The read-only attribute is retained, however.
+
+CONFIGURATION:  RENAME's defaults can be changed using ZCNFG and 
+the accompanying RENAMEnn.CFG file.  The name of the CFG file 
+should not be changed so that ZCNFG can find it automatically 
+even if RENAME is renamed to REN or something else.  The 
+configuration options are explained on ZCNFG's help screen.
+
+HISTORY:
+
+Version 3.7 -- November 17, 1990 -- Howard Goldstein
+     Fixed an obscure bug affecting Control mode.
+
+Version 3.6 -- November 12, 1990 -- Gene Pizzetta and Howard Goldstein
+     RENAME's biggest fault was that it erased existing read-only 
+     files without notice.  Now it prompts before erasing R/O 
+     files.  An R option has been added to erase R/O files 
+     without prompting.  A Q option has also been added to toggle 
+     the default quiet mode, which is controlled by the ZCPR3 
+     quiet flag or a new quiet configuration byte.  (In fact, all 
+     command line options, except I, can now be configured as the 
+     default mode with ZCNFG.)  Since ZSDOS preserves file 
+     attributes automatically, RENAME pays no attention to the 
+     attributes unless the file is read-only or the DOS is ZRDOS 
+     or DRI's BDOS.  This results in a significant speed-up under 
+     ZSDOS (and under Z3PLUS, which also preserves attributes).  
+     In no case, however, is the PUBLIC attribute (F2) preserved 
+     because it could be dangerous to do so.  RENAME now displays 
+     the DU specification with each filename so you can be 
+     confident which directory it is working in.  A few minor 
+     bugs have been swatted and the code has been streamlined.
+
+Version 3.5 -- July 1, 1990 -- Gene Pizzetta
+     Changed filename display to "oldfile to newfile" instead of 
+     the strange "newfile from oldfile".  Added configuration 
+     byte after ASCII string 'SYSFILES>' to chose whether to 
+     include system files by default (non-zero) or exclude them 
+     by default (0).  S option now toggles the default meaning 
+     (it's current action is shown by the usage screen.  Now 
+     filters high bit of filenames for terminals that display 
+     special characters that way.  At the suggestion of Howard 
+     Goldstein, RENAME no longer signs on with its load address 
+     and version number; these are displayed only on the usage 
+     screen.  Restored Q (quit) as a valid response to an rename 
+     or erase query, but ^C still works.  Display has been made 
+     even more compact than last version.  Many of these changes 
+     are to make the RENAME interface very similar to the RCP 
+     version.  Sets program error flag to 10 if a matching 
+     filename is not found.  If an invalid option is given, the 
+     program error flag is set to 19 and the error handler is 
+     invoked.  ZEX input is suspended during execution of RENAME. 
+     The number of files renamed (up to 255) is placed in ZCPR3 
+     register 0.  Now obeys ZCPR3 quiet flag, except when in 
+     inspect or control mode, or when a prompt is necessary.  
+     Removed Wheel byte protection for E and S options.
+
+Version 3.4 -- March 31, 1990 -- Gene Pizzetta
+     Modified for more compact display, usually a single line for 
+     each file renamed.  ^C aborts at any prompt.
+
+Version 3.3A -- December 30, 1987 -- Bruce Morgen
+     Strip high bit from EFCB program name characters.  "E" and 
+     "S" options require Wheel byte set; help message reflects 
+     this.
+
+Version 3.3 -- December 19, 1987 -- Bruce Morgen
+     Help message now reflects actual COM file name used, PPIP- 
+     style dual syntax implemented (as requested by Ken 
+     Taschner).  This required some rather tricky parsing to 
+     support the single-filespec syntax "afn.typ [/]c", so while 
+     I was at it I made control mode mandatory and automatic for 
+     single-filespec elements and eliminated the C option letter 
+     altogether (as Rick says: "It only makes sense"...).  In 
+     order support this single-filespec mode when such an element 
+     is the last (or only) one in a RENAME command line, the 
+     second file-spec in the last (or only) command is tested if 
+     the MS-DOS syntax is detected.  If that second filespec 
+     starts with a "/" or includes only valid option letters (and 
+     no more characters than the number of valid option letters) 
+     it is assumed to be an option specifier rather than a 
+     rename-to filespec.  Following Howard Goldstein's (LX17 & 
+     18) lead, filespec-to-FCB parsing calls the Z33 CCP if it's 
+     available.  A Z80, HD64180, NSC800 or (someday?) Z280 CPU 
+     now is required.
+
+Version 3.2 -- August 25, 1987 -- Jay Sage
+     Changed to allow a leading slash before an option to make 
+     program consistent with a number of other Z programs (this 
+     was supposed to happen, but there was a bug in the code).  
+     Put data into a DSEG.  Made header indicate load address.
+
+Version 3.1 -- April 12, 1987 -- Jay Sage
+     Took idea of Rick Charnes and implemented it as an option so 
+     that one does not have to have two versions of the program.  
+     The option is 'E'.  Also updated code to ZCPR33 type-3 
+     environment to allow linking RENAME for execution in high 
+     memory if desired.
+
+Version 3.0a -- April 9, 1987 -- Rick Charnes
+     I have modified this source code slightly so that if you try 
+     to rename FILE1 to FILE2 and FILE2 already exists, the 
+     program will NOT ask you if you are sure you want to delete 
+     FILE2.  It just goes ahead and deletes the darn thing and 
+     renames FILE1.  I had an application for it, studied and 
+     little and ... it works.  Be careful, though.  This is a 
+     special use program, and NOT for everyday use.  I found an 
+     alias in which I needed it.
+
+Version 3.0 -- May 18, 1984 -- Richard Conn
+Version 2.0 -- January 16, 1983 -- Richard Conn
+Version 1.4 -- January 6, 1983 -- Richard Conn
+Version 1.3 -- December 7, 1982 -- Richard Conn
+Version 1.2 -- November 10, 1982 -- Richard Conn
+Version 1.1 -- October 26, 1981 -- Richard Conn
+     RENAME.ASM
+                           
