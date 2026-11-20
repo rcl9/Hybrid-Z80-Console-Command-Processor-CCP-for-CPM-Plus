@@ -30,25 +30,25 @@ This repo also provides:
 
 ## Category links:
 
-    [How to Install](#how-to-install)
-    [Speed Comparisons](#speed-comparisons)
-    [Usable TPA for the Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
+[How to Install](#how-to-install)
+[Speed Comparisons](#speed-comparisons)
+[Usable TPA for the Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
     
-    [History Recall Mechanisms](/HistoryRecall.md)
-    [Named Directories ](/Named_Directories.md)
-    [Command Aliases Mechanism](/Aliases.md)
-    [Modified Runtime Behavior of the CCP](#modified-runtime-behavior-of-the-ccp)
-    [A curated set of CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md)
+[History Recall Mechanisms](/HistoryRecall.md)
+[Named Directories ](/Named_Directories.md)
+[Command Aliases Mechanism](/Aliases.md)
+[Modified Runtime Behavior of the CCP](#modified-runtime-behavior-of-the-ccp)
+[A curated set of CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md)
     
-    [Why Was This System Written and Unified?](#why-was-this-system-written-and-unified?)
-    [Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era?)
-    [How to (Optionally) Compile and Link](#how-to-compile-and-link)
+[Why Was This System Written and Unified?](#why-was-this-system-written-and-unified?)
+[Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era?)
+[How to (Optionally) Compile and Link](#how-to-compile-and-link)
 
 ## How to Install
 
 - On your existing CP/M 3 boot disk, rename "ccp.com" to "ccp-dri.com" so that it no longer becomes the default CCP at warm boots.
 
-- Copy the files from the [Distribution](/Distribution) directory and the {CP/M Utilities}(/CPM_Utilities.md) sub-directory to your CP/M 3 boot disk. Copy "CCP3RCL9.com" to "ccp.com" so that it becomes the default CCP. 
+- Copy the files from the [Distribution](/Distribution) directory and the {CP/M Utilities}(/Distribution/CPM_Utilities.md) sub-directory to your CP/M 3 boot disk. Copy "CCP3RCL9.com" to "ccp.com" so that it becomes the default CCP. 
 
 - Edit the *ROOT.dir* file with the named directory mappings for your system. This will get loaded via *SetDIR.com* at start-up
 
@@ -213,12 +213,12 @@ I am providing runtime Z80 binaries in the [Distribution]/Distribution) director
 
 ### The *Hist.com* command line recall program. This was written by Jim Lopushinsky, July 25 1986
 
-    I am providing a copy of the [original 1986 files](/History-Recall/Hist-Lopushinsky/Original) and a copy of my bug-fixed "SetDIR.mac".
+I am providing a copy of the [original 1986 files](/History-Recall/Hist-Lopushinsky/Original) and a copy of my bug-fixed "SetDIR.mac".
     
-    I am also providing a snapshot of [my own recompilation](/History-Recall/Hist-Lopushinsky/RCL9 ). I have set the total history buffer length to be 192 bytes to save on TPA memory space. Copy those files to your CP/M system then execute *sub make*. This will generate the files *Hist.com* and *HistClr.com*. 
+I am also providing a snapshot of [my own recompilation](/History-Recall/Hist-Lopushinsky/RCL9 ). I have set the total history buffer length to be 192 bytes to save on TPA memory space. Copy those files to your CP/M system then execute *sub make*. This will generate the files *Hist.com* and *HistClr.com*. 
 
 ### The *Hist30.com* command line recall program (and *HistClr.com* to clear the buffers). This was written by Stuart Rose, Nov 6 1986
 
-    I am providing a copy of the [original 1986 files](/History-Recall/Hist-Rose/Original) for easier access by others.
+I am providing a copy of the [original 1986 files](/History-Recall/Hist-Rose/Original) for easier access by others.
     
-    I am also providing a snapshot of [my own recompilation](/History-Recall/Hist-Rose/RCL9). I have reduced each of the 9 history buffers from 128 to 40 characters to save on TPA memory space. Copy those files to your CP/M system then execute "submit hist30". This will generate the file *Hist30.com*. 
+ I am also providing a snapshot of [my own recompilation](/History-Recall/Hist-Rose/RCL9). I have reduced each of the 9 history buffers from 128 to 40 characters to save on TPA memory space. Copy those files to your CP/M system then execute "submit hist30". This will generate the file *Hist30.com*. 

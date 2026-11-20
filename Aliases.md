@@ -2,12 +2,13 @@
 
 What I really wanted in my revised CP/M3 CCP was a command alias mechanism similar to that offered by the ZCPR3 and Z3Plus systems. That lead me to writing a fairly complex and entirely new custom command alias mechanism which is both fast and has a minimal memory footprint.
 
-The aliases are defined in a plain text file named "Aliases.cmd" which are held and "served" by the Alias RSX memory-resident module.
+The aliases are defined in a plain text file named *Aliases.cmd* which are held and "served" by the Alias RSX memory-resident module.
 
-The aliases are loaded into memory at startup (such as in the *Profile.sub* CP/M3 start-up script) using *AliasLdr.com* program which itself then loads the Aliases.cmd text file. What this program does is to parse the Aliases.cmd file and place it into a memory efficient data array held and served by the corresponding RSX module (which resides in high memory below the BDOS). In CP/M 3 the CCP does not reside in memory at all times (as it does with CP/M 2.2) but rather is loaded at 0x100 if and when user interaction is desired. As such, the new CCP3-RCL9 program implements an Alias command translator which calls into this RSX to obtain a pointer to the pre-parsed Alias command list then does command line substitution as needed. 
+The aliases are loaded into memory at startup (such as in the *Profile.sub* CP/M3 start-up script) using *AliasLdr.com* program which itself then loads the *Aliases.cmd* text file. What this program does is to parse the *Aliases.cmd* file and place it into a memory efficient data array held and served by the corresponding RSX module (which resides in high memory below the BDOS). In CP/M 3 the CCP does not reside in memory at all times (as it does with CP/M 2.2) but rather is loaded at 0x100 if and when user interaction is desired. As such, the new CCP3-RCL9 program implements an Alias command translator which calls into this RSX to obtain a pointer to the pre-parsed Alias command list then does command line substitution as needed. 
 
 An example aliases.cmd file:
 
+```
 ; Aliases command file
 'DIR',     'D23',     '%1'
 'DIR2U',     'XDIR',     '%2 /U'
@@ -16,6 +17,7 @@ An example aliases.cmd file:
 'DIRS',     '3DIR',     '%1'
 'DEL',     'ERA',     '%1'
 'TYPE',     'QL',     '%1'
+```
 
 The Distribution directory includes a copy of my own Aliases.cmd file. 
 
