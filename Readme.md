@@ -48,9 +48,9 @@ This repo also provides:
 [Complementary CP/M Utilities for the CCP](/CPM_Utilities.md)
 
     
-[Why Was This System Written and Unified?](#why-was-this-system-written-and-unified-)
+[Why Was This System Written and Unified?](#why-was-this-system-written-and-unified)
 
-[Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era-)
+[Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era)
 
 [How to (Optionally) Compile and Link](#how-to-compile-and-link)
 
