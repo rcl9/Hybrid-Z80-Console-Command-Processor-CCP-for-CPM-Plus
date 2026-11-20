@@ -31,17 +31,27 @@ This repo also provides:
 ## Category links:
 
 [How to Install](#how-to-install)
+
 [Speed Comparisons](#speed-comparisons)
+
 [Usable TPA for the Exidy Sorcerer](#usable-tpa-for-the-exidy-sorcerer)
+
     
 [History Recall Mechanisms](/HistoryRecall.md)
+
 [Named Directories ](/Named_Directories.md)
+
 [Command Aliases Mechanism](/Aliases.md)
+
 [Modified Runtime Behavior of the CCP](#modified-runtime-behavior-of-the-ccp)
+
 [A curated set of CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md)
+
     
 [Why Was This System Written and Unified?](#why-was-this-system-written-and-unified?)
+
 [Why Not Use Existing Systems from the 1986-1993 Era?](#why-not-use-existing-systems-from-the-1986-1993-era?)
+
 [How to (Optionally) Compile and Link](#how-to-compile-and-link)
 
 ## How to Install
