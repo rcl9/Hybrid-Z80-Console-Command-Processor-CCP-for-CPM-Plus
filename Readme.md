@@ -24,7 +24,7 @@ For those that are not aware of them, NzCOM and Z3Plus are follow-on, early 1990
 
 This repo also provides:
 
-- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as code fixes to *SAlias16.com*.
+- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as stack size code fixes to *SAlias16.com*.
 - A good primer and well documented code on how to write a medium-complexity RSX module for the CP/M 3 operating system (written by me).
 - A complementary subset of my highly curated set of [CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md) that augment this hybrid CCP system.
 
@@ -220,7 +220,7 @@ I am providing runtime Z80 binaries in the [Distribution](/Distribution) directo
 
 ### The *Hist.com* command line recall program. This was written by Jim Lopushinsky, July 25 1986
 
-I am providing a copy of the [original 1986 files](/History-Recall/Hist-Lopushinsky/Original) and a copy of my bug-fixed "SetDIR.mac".
+I am providing a copy of the [original 1986 files](/History-Recall/Hist-Lopushinsky/Original).
     
 I am also providing a snapshot of [my own recompilation](/History-Recall/Hist-Lopushinsky/RCL9 ). I have set the total history buffer length to be 192 bytes to save on TPA memory space. Copy those files to your CP/M system then execute *sub make*. This will generate the files *Hist.com* and *HistClr.com*. 
 
