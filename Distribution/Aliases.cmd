@@ -4,30 +4,28 @@
 ; From the CCP you can also use "LstAlias" and "AliasNam"
 'ALIASES', 'TYPE', 'aliases.cmd'
 
-'DIR', 'D23', '%1'
+; The primary "go-to" directory lister. /B = list system files. 
+'DIR', 'D23', '%1 /B'
 
-;  Show directories from all active user areas
-'DIRU', 'D23', '%2 /U'
+;  Show directories from all active user areas and system files
+'DIRU', 'D23', '%2 /U /B'
 
-; Long directory listing (sorted) incl size of each file
+; Long directory listing (sorted) incl size of each file + system files
 'DIRS', '3DIR', '%1'
-; 3dir in traditional sorted filename-name only listing mode
-'DIRS2', '3DIR', '[COLS] %1'
 
 ; X-Dir III v2 by Richard Conn. "xdir //" for options
-; XDIR can be very slow if there are a lot of files across many user areas
-'DIR2', 'XDIR', '%1'
+'DIR2', 'XDIR', '%1 /AA'
 ;'xdir /OG = Group by extension/filename
-'DIR2G', 'XDIR' ,'%2 /G'
+'DIR2G', 'XDIR' ,'%2 /G /AA'
 ; xdir /U = Show all user areas
-'DIR2U', 'XDIR', '%2 /U'
+'DIR2U', 'XDIR', '%2 /U /AA'
 
 ; A complex directory lister by Richard Collett
 ; Show help via "l2-45 ::"
 ; Note: CPM3 needs double spaces after the filename
-'DIR3', 'l2-45', ' %1'
+'DIR3', 'l2-45', ' %2 A'
 ; List across all user areas
-'DIR3U', 'l2-45', ' *:%2'
+'DIR3U', 'l2-45', ' *:%2 A'
 
 ; UNIX "disk free" for logged drives
 'DF', '3SHOW', '%1'

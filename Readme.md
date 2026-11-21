@@ -24,9 +24,10 @@ For those that are not aware of them, NzCOM and Z3Plus are follow-on, early 1990
 
 This repo also provides:
 
-- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as stack size code fixes to *SAlias16.com*.
-- A good primer and well documented code on how to write a medium-complexity RSX module for the CP/M 3 operating system (written by me).
+- A [memory footprint](#usable-tpa-for-the-exidy-sorcerer) and [loading time](#speed-comparisons) comparison of this new hybrid CCP system vs. NzCOM and Z3Plus.
 - A complementary subset of my highly curated set of [CP/M 2.2 and 3 command line uilities](/CPM_Utilities.md) that augment this hybrid CCP system.
+- A good primer and well documented code on how to write a medium-complexity RSX module for the CP/M 3 operating system (written by me).
+- [Runtime files](/Z3Plus) to allow NzCOM and Z3Plus to run on the Exidy Sorcerer as well as stack size code fixes to *SAlias16.com*.
 
 ## Category links:
 
@@ -147,8 +148,8 @@ CP/M 3 plus the various RSX modules as provided in this project:
 | Named directories (via the SetDIR RSX) | 40,198   | 1,279 bytes  |
 | Hist.com (192 byte buffer size)        | 39,430   | 2,048 bytes  |
 | Hist30.com (9 x 40 byte buffers)       | 38,662   | 2,816 bytes  |
-| Alias + Hist + SetDIR                | 37,126   | ???????????????????? bytes |
-| Alias + Hist30 + SetDIR                | 35,334   | ?????????????????? bytes |
+| Alias + Hist + SetDIR                | 37,126   | 4.352 bytes |
+| Alias + Hist30 + SetDIR                | 35,334   | 6,144 bytes |
 
 CP/M 3 + Z3Plus:
 
